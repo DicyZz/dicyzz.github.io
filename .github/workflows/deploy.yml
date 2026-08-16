@@ -35,6 +35,7 @@ jobs:
       - name: Build site with Notion Data
         env:
           NOTION_API_SECRET: ${{ secrets.NOTION_API_SECRET }}
+          DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
           NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
         run: npm run build
 
