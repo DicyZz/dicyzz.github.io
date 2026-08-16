@@ -35,7 +35,7 @@ const getSite = function () {
 // https://astro.build/config
 export default defineConfig({
   site: getSite(),
-  base: BASE_PATH,
+  base: ‘/blog’,
   integrations: [
     icon(),
     CoverImageDownloader(),
