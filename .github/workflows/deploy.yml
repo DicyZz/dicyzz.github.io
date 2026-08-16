@@ -1,12 +1,9 @@
-name: Deploy Notion Blog to GitHub Pages
+name: Deploy astro-notion-blog to Pages
 
 on:
   push:
     branches: [ main ]
-  schedule:
-    # 每天 UTC 时间 0:00 (北京时间早上 8:00) 自动触发一次编译更新
-    - cron: '0 0 * * *'
-  workflow_dispatch: # 允许在 GitHub 手动点击按钮强行触发构建
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,8 +11,8 @@ permissions:
   id-token: write
 
 concurrency:
-  group: 'pages'
-  cancel-in-progress: true
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -24,13 +21,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
+          cache: ${{ hashFiles('package-lock.json') != '' && 'npm' || '' }}
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build site with Notion Data
         env:
@@ -42,14 +40,15 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './dist'
+          path: ./dist
 
   deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
     needs: build
+    runs-on: ubuntu-latest
+    name: Deploy
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
