@@ -29,6 +29,7 @@ const [posts, rankedPosts, tags, numberOfPages] = await Promise.all([
 
 <Layout>
   <div slot="main" class={styles.main}>
+    <p style="margin-bottom: 2rem; opacity: 0.85; font-size: 1.05rem;">Record, summarize, and improve.</p>
     {
       posts.length === 0 ? (
         <NoContents contents={posts} />
