@@ -93,7 +93,7 @@ if (database.Icon && database.Icon.Type === 'file') {
           <div class="content">
             <header>
               <h1>
-                <a href={getNavLink('/')}>
+                <a href="#" onclick="window.scrollTo({ top: 0, behavior: 'smooth' }); return false;">
                   {
                     database.Icon && database.Icon.Type === 'emoji' ? (
                       <>
