@@ -296,6 +296,8 @@ if (database.Icon && database.Icon.Type === 'file') {
 
   * {
     box-sizing: border-box;
+    /* 1. 增强防文本/长链接溢出 */
+    overflow-wrap: anywhere;
     word-break: break-word;
   }
 
@@ -315,17 +317,23 @@ if (database.Icon && database.Icon.Type === 'file') {
       'Hiragino Sans GB', メイリオ, Meiryo, 'Apple Color Emoji', Arial,
       sans-serif, 'Segoe UI Emoji', 'Segoe UI Symbol';
 
-    /*background-image: radial-gradient(#ddd 1px, transparent 1px),
-      radial-gradient(#ddd 1px, transparent 1px);*/
     background-position: 0 0, 25px 25px;
     background-attachment: fixed;
     background-size: 50px 50px;
 
-    /* Hack */
     overflow-x: hidden;
 
     -webkit-font-smoothing: antialiased;
     -webkit-text-size-adjust: 100%;
+  }
+
+  /* 2. 关键补全：防止 Notion 插入的大图/视频撑爆页面 */
+  img,
+  video,
+  iframe,
+  svg {
+    max-width: 100%;
+    height: auto;
   }
 
   figure {
@@ -380,14 +388,18 @@ if (database.Icon && database.Icon.Type === 'file') {
     margin: 0;
     padding-inline-start: 1.5rem;
   }
+
+  /* 3. 关键修正：修复代码块横向溢出问题 */
   pre {
     margin: 0;
-    white-space: pre;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: pre-wrap; /* 超长代码自动折行，或保持滚动 */
     tab-size: 2;
+    -webkit-overflow-scrolling: touch;
   }
   pre :global(code) {
     overflow: auto;
-    -webkit-overflow-scrolling: touch;
   }
 
   hr {
@@ -409,6 +421,7 @@ if (database.Icon && database.Icon.Type === 'file') {
 
   table {
     display: block;
+    max-width: 100%;
     overflow-x: auto;
     white-space: nowrap;
     border-collapse: collapse;
