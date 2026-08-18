@@ -190,11 +190,6 @@ if (database.Icon && database.Icon.Type === 'file') {
     width: 300px;
     padding: 20px 20px;
     background-color: #f4f4f4;
-    position: sticky;
-    top: 0;
-    align-self: flex-start;
-    max-height: 100vh;
-    overflow-y: auto;
   }
   @media (max-width: 640px) {
     aside {
@@ -323,7 +318,7 @@ if (database.Icon && database.Icon.Type === 'file') {
     margin: 0;
     font-size: 16px;
     width: 100%;
-    overflow-x: clip; /* 不会破坏 position:sticky */
+    overflow-x: hidden;
   }
 
   h1, h2, h3, h4, h5, h6 {
