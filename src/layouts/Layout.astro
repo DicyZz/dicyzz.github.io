@@ -157,11 +157,16 @@ if (database.Icon && database.Icon.Type === 'file') {
 <style>
   .container {
     min-height: 100vh;
+    width: 100%;
+    margin: 0 auto;
+    padding: 0;
   }
 
   .container > div {
     display: flex;
-    max-width: 1280px;
+    width: 100%;
+    max-width: 1600px;
+    margin: 0 auto;
   }
   @media (max-width: 640px) {
     .container > div {
@@ -204,7 +209,7 @@ if (database.Icon && database.Icon.Type === 'file') {
   }
 
   div.content {
-    padding: 20px 40px;
+    padding: 20px 24px;
   }
   @media (max-width: 640px) {
     div.content {
