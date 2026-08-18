@@ -294,11 +294,10 @@ if (database.Icon && database.Icon.Type === 'file') {
       Courier, monospace;
   }
 
-  * {
-    box-sizing: border-box;
-    /* 1. 增强防文本/长链接溢出 */
-    overflow-wrap: anywhere;
-    word-break: break-word;
+  /* 1. 强制所有元素遵循 border-box 并且允许缩小 */
+  *, *::before, *::after {
+    box-sizing: border-box !important;
+    min-width: 0;
   }
 
   html,
@@ -306,6 +305,8 @@ if (database.Icon && database.Icon.Type === 'file') {
     padding: 0;
     margin: 0;
     font-size: 16px;
+    width: 100%;
+    overflow-x: hidden !important; /* 彻底切除横向滚动条 */
   }
 
   body {
@@ -321,21 +322,44 @@ if (database.Icon && database.Icon.Type === 'file') {
     background-attachment: fixed;
     background-size: 50px 50px;
 
-    overflow-x: hidden;
-
     -webkit-font-smoothing: antialiased;
     -webkit-text-size-adjust: 100%;
   }
 
-  /* 2. 关键补全：防止 Notion 插入的大图/视频撑爆页面 */
-  img,
-  video,
-  iframe,
-  svg {
-    max-width: 100%;
-    height: auto;
+  /* 2. 约束主页面容器与所有 Flex 子容器 */
+  main,
+  div[slot="main"],
+  .main,
+  .content,
+  .post,
+  .aside,
+  article,
+  section {
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
 
+  /* 3. 针对 Notion 渲染组件（如多栏布局、代码块、表格、图片）防溢出 */
+  img, video, iframe, svg, canvas {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  pre, code {
+    max-width: 100% !important;
+    white-space: pre-wrap !important; /* 强制长代码自动换行 */
+    overflow-x: auto !important;
+  }
+
+  table {
+    display: block !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+  }
+
+  /* 通用文案样式 */
   figure {
     margin: 0;
     font-size: 0.85rem;
@@ -346,15 +370,6 @@ if (database.Icon && database.Icon.Type === 'file') {
   a {
     color: var(--accents-1);
     text-decoration: none;
-  }
-  a:hover {
-    color: var(--accents-1);
-  }
-
-  mark {
-    padding: var(--gap-quarter);
-    border-radius: var(--radius);
-    background: rgba(247, 212, 255, 0.8);
   }
 
   h1 {
@@ -370,36 +385,16 @@ if (database.Icon && database.Icon.Type === 'file') {
     }
   }
 
-  ol {
+  ol, ul, p {
     color: #222;
     font-weight: 400;
-    font-size: 0.9rem;
     line-height: 1.8rem;
-  }
-  p,
-  ul {
-    color: #222;
-    font-weight: 400;
-    font-size: 1rem;
-    line-height: 1.8rem;
-  }
-  ul,
-  ol {
-    margin: 0;
-    padding-inline-start: 1.5rem;
+    max-width: 100%;
   }
 
-  /* 3. 关键修正：修复代码块横向溢出问题 */
-  pre {
+  ul, ol {
     margin: 0;
-    max-width: 100%;
-    overflow-x: auto;
-    white-space: pre-wrap; /* 超长代码自动折行，或保持滚动 */
-    tab-size: 2;
-    -webkit-overflow-scrolling: touch;
-  }
-  pre :global(code) {
-    overflow: auto;
+    padding-inline-start: 1.5rem;
   }
 
   hr {
@@ -408,45 +403,5 @@ if (database.Icon && database.Icon.Type === 'file') {
     border: 0;
     margin: 0.3rem 0;
     background-color: #333;
-  }
-
-  code {
-    font-size: 0.9rem;
-    background: rgba(135, 131, 120, 0.15);
-    color: #eb5757;
-    padding: 0.25rem;
-    border-radius: var(--radius);
-    font-family: var(--font-mono);
-  }
-
-  table {
-    display: block;
-    max-width: 100%;
-    overflow-x: auto;
-    white-space: nowrap;
-    border-collapse: collapse;
-  }
-
-  table tr {
-    vertical-align: top;
-  }
-
-  table th {
-    font-weight: 600;
-    background-color: #f4f4f4;
-  }
-
-  table td,
-  table th {
-    font-size: 0.9rem;
-    border: 1px solid #e4e4e4;
-    padding: 0.5rem 1rem;
-    text-align: left;
-    line-height: 1.2rem;
-  }
-  table td::after {
-    content: '';
-    display: inline-block;
-    min-height: 0.9rem;
   }
 </style>
