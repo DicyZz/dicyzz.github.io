@@ -190,6 +190,11 @@ if (database.Icon && database.Icon.Type === 'file') {
     width: 300px;
     padding: 20px 20px;
     background-color: #f4f4f4;
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    max-height: 100vh;
+    overflow-y: auto;
   }
   @media (max-width: 640px) {
     aside {
@@ -203,7 +208,8 @@ if (database.Icon && database.Icon.Type === 'file') {
   div.cover img {
     display: block;
     width: 100%;
-    height: 20vh;
+    height: 30vh;
+    min-height: 180px;
     object-fit: cover;
     object-position: center 60%;
   }
@@ -306,13 +312,22 @@ if (database.Icon && database.Icon.Type === 'file') {
     overflow-wrap: anywhere;
   }
 
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 1.5rem;
+  }
+
   html,
   body {
     padding: 0;
     margin: 0;
     font-size: 16px;
     width: 100%;
-    overflow-x: hidden !important; /* 切除横向滚动条 */
+    overflow-x: clip; /* 不会破坏 position:sticky */
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    scroll-margin-top: 1.5rem;
   }
 
   body {
@@ -348,9 +363,13 @@ if (database.Icon && database.Icon.Type === 'file') {
   }
 
   /* 3. 针对 Notion 渲染组件（如多栏布局、图片、视频）防溢出 */
-  img, video, iframe, svg, canvas {
+  img, video, svg, canvas {
     max-width: 100% !important;
     height: auto !important;
+  }
+  /* iframe 仅约束宽度，不覆盖 height（避免破坏 Giscus 等嵌入的高度） */
+  iframe {
+    max-width: 100% !important;
   }
 
   /* 代码块：允许横向滚动而不破坏排版，仅约束宽度不撑爆页面 */

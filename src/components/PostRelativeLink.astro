@@ -35,7 +35,7 @@ const { prevPost, nextPost } = Astro.props
     }
   </div>
   <div>
-    <a href={getNavLink('/')} class="text">↑Top</a>
+    <a href="#" class="text" onclick="window.scrollTo({top:0,behavior:'smooth'});return false">↑Top</a>
   </div>
 </div>
 
