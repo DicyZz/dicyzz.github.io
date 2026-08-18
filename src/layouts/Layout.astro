@@ -294,10 +294,11 @@ if (database.Icon && database.Icon.Type === 'file') {
       Courier, monospace;
   }
 
-  /* 1. 强制所有元素遵循 border-box 并且允许缩小 */
+  /* 1. 强制所有元素遵循 border-box 并允许缩小，避免子元素撑破容器 */
   *, *::before, *::after {
     box-sizing: border-box !important;
     min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   html,
@@ -306,7 +307,7 @@ if (database.Icon && database.Icon.Type === 'file') {
     margin: 0;
     font-size: 16px;
     width: 100%;
-    overflow-x: hidden !important; /* 彻底切除横向滚动条 */
+    overflow-x: hidden !important; /* 切除横向滚动条 */
   }
 
   body {
@@ -341,22 +342,51 @@ if (database.Icon && database.Icon.Type === 'file') {
     word-break: break-word;
   }
 
-  /* 3. 针对 Notion 渲染组件（如多栏布局、代码块、表格、图片）防溢出 */
+  /* 3. 针对 Notion 渲染组件（如多栏布局、图片、视频）防溢出 */
   img, video, iframe, svg, canvas {
     max-width: 100% !important;
     height: auto !important;
   }
 
-  pre, code {
-    max-width: 100% !important;
-    white-space: pre-wrap !important; /* 强制长代码自动换行 */
-    overflow-x: auto !important;
+  /* 代码块：允许横向滚动而不破坏排版，仅约束宽度不撑爆页面 */
+  pre {
+    margin: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    tab-size: 2;
+    -webkit-overflow-scrolling: touch;
+  }
+  pre :global(code) {
+    overflow: auto;
   }
 
+  /* 表格：宽表格横向滚动，单元格样式保持正常 */
   table {
-    display: block !important;
-    max-width: 100% !important;
-    overflow-x: auto !important;
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    border-collapse: collapse;
+  }
+  table tr {
+    vertical-align: top;
+  }
+  table th {
+    font-weight: 600;
+    background-color: #f4f4f4;
+  }
+  table td,
+  table th {
+    font-size: 0.9rem;
+    border: 1px solid #e4e4e4;
+    padding: 0.5rem 1rem;
+    text-align: left;
+    line-height: 1.2rem;
+  }
+  table td::after {
+    content: '';
+    display: inline-block;
+    min-height: 0.9rem;
   }
 
   /* 通用文案样式 */
@@ -370,6 +400,15 @@ if (database.Icon && database.Icon.Type === 'file') {
   a {
     color: var(--accents-1);
     text-decoration: none;
+  }
+  a:hover {
+    color: var(--accents-1);
+  }
+
+  mark {
+    padding: var(--gap-quarter);
+    border-radius: var(--radius);
+    background: rgba(247, 212, 255, 0.8);
   }
 
   h1 {
@@ -385,14 +424,21 @@ if (database.Icon && database.Icon.Type === 'file') {
     }
   }
 
-  ol, ul, p {
+  ol {
     color: #222;
     font-weight: 400;
+    font-size: 0.9rem;
     line-height: 1.8rem;
-    max-width: 100%;
   }
-
-  ul, ol {
+  p,
+  ul {
+    color: #222;
+    font-weight: 400;
+    font-size: 1rem;
+    line-height: 1.8rem;
+  }
+  ul,
+  ol {
     margin: 0;
     padding-inline-start: 1.5rem;
   }
@@ -403,5 +449,14 @@ if (database.Icon && database.Icon.Type === 'file') {
     border: 0;
     margin: 0.3rem 0;
     background-color: #333;
+  }
+
+  code {
+    font-size: 0.9rem;
+    background: rgba(135, 131, 120, 0.15);
+    color: #eb5757;
+    padding: 0.25rem;
+    border-radius: var(--radius);
+    font-family: var(--font-mono);
   }
 </style>
