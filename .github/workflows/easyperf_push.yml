@@ -1,32 +1,35 @@
-name: EasyPerf Auto Push
+name: EasyPerf Daily Push
 
 on:
-  workflow_dispatch:
   schedule:
+    # 北京时间每天早上 08:00 自动触发 (UTC 时间 00:00)
     - cron: '0 0 * * *'
+  workflow_dispatch: # 支持在 GitHub Actions 页面手动点击触发运行
 
 jobs:
-  build-and-push:
+  push-briefing:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
+      # 1. 拉取仓库代码
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # 2. 设置 Python 运行环境
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
+      # 3. 安装 Python 依赖（openai 与 requests）
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r scripts/requirements.txt
+          pip install openai requests
 
+      # 4. 执行推送脚本
       - name: Run Push Script
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY || secrets.LLM_API_KEY }}
-          SCF_PROXY_URL: ${{ secrets.SCF_PROXY_URL }}
-          WECHAT_APP_ID: ${{ secrets.WECHAT_APP_ID }}
-          WECHAT_APP_SECRET: ${{ secrets.WECHAT_APP_SECRET }}
-          WECHAT_THUMB_MEDIA_ID: ${{ secrets.WECHAT_THUMB_MEDIA_ID }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
         run: python scripts/easyperf_push.py
