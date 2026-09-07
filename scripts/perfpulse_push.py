@@ -16,7 +16,7 @@ EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")
 
 def generate_briefing():
-    print("1. 正在通过 DeepSeek 抓取与汇总最新 PerfPulse 技术简报...")
+    print("1. 正在通过 DeepSeek 检索全网顶级源并生成 PerfPulse 技术简报...")
     if not DEEPSEEK_API_KEY:
         print("❌ 错误：未配置 DEEPSEEK_API_KEY！")
         sys.exit(1)
@@ -29,40 +29,47 @@ def generate_briefing():
     today_str = datetime.now().strftime("%Y年%m月%d日")
 
     prompt = f"""
-你是一位专注于计算机体系结构、高性能计算（HPC）、LLM 系统架构与系统性能优化的资深专家。
-今天是 {today_str}。请检索并整理**最新**（近 24-48 小时内）的全网最前沿技术动态，生成一份专业的【PerfPulse 每日技术简报】。
-
-### 📌 强制数据检索来源参考：
-- **体系结构与硬件**：Phoronix, AnandTech, Chips and Cheese, ServeTheHome, IEEE Micro, Hot Chips
-- **LLM 系统与推理/训练加速**：Hugging Face Blog, PyTorch Core / vLLM / SGLang GitHub, FlashAttention 提交, ArXiv (cs.CL / cs.DC / cs.AR), SemiAnalysis
-- **HPC 与编译优化**：LLVM Discourse / Commits, GCC Mailing List, NVIDIA Developer Blog, CUDA/ROCm Releases, MLIR News
-- **系统与 Kernel 调优**：LWN.net, Linux Kernel Mailing List (LKML), eBPF.io, Brendan Gregg's Blog, Performance Mailing List
+你是一位专注于计算机体系结构、高性能计算（HPC）、LLM 系统架构与系统性能调优的顶级资深架构师。
+今天是 {today_str}。请检索全网**最新**（近 24-48 小时内）的前沿技术情报，生成一份专业的【PerfPulse 每日技术简报】。
 
 ---
 
-### 📝 请按以下 5 个核心板块输出内容：
+### 📌 强制数据检索与对标来源（请检索并参考以下源头的最新更新）：
+1. **LLM 系统 & AI Infra**：vLLM / SGLang GitHub & Blog, PyTorch Engineering Blog, NVIDIA Technical Blog (CUDA/CUTLASS), Hugging Face Blog, Tri Dao (FlashAttention) 动态, MLSys, ArXiv (`cs.AR`, `cs.DC`, `cs.CL`), SemiAnalysis.
+2. **体系结构 & 芯片微架构**：Chips and Cheese, Phoronix, ServeTheHome, AnandTech, RISC-V International, ACM SIGARCH (Computer Architecture Today), IEEE Micro.
+3. **HPC & 编译优化**：LLVM Discourse/Commits, GCC Mailing List, MLIR News, TVM Discourse, OneAPI / ROCm Release Notes.
+4. **Linux 内核 & 系统调优**：LWN.net, LKML, Brendan Gregg's Blog, ebpf.io, Cilium Blog, Cloudflare Tech Blog, Netflix Systems Blog.
 
-1. **🧠 LLM 系统与推理/训练加速**
-   - 关注：大模型推理引擎（vLLM, TensorRT-LLM, SGLang）、分布式并行算法（Tensor/Pipeline/Context Parallelism, SUMMA）、FlashAttention/FlashDecoding、量化技术（FP8/FP4/AWQ/GPTQ）及 GPU/NPU 内存带宽 bottlenecks（Prefill/Decode 阶段优化）。
+---
 
-2. **🚀 计算机体系结构与芯片动态**
-   - 关注：CPU/GPU/NPU/TPU 最新架构、指令集扩展（RISC-V/AVX-512/AMX/SVE）、微架构流水线改进、Cache & Interconnect 设计。
+### 📝 请按以下结构输出简报内容：
 
-3. **⚡ 高性能计算与编译优化**
-   - 关注：LLVM/GCC 优化 Passes、MLIR 编译器基础设施、CUDA/ROCm 编程模型优化、Auto-vectorization/SIMD 优化。
+#### 🌟 0. 今日深度剖析 (Today's Deep Dive)
+- 从近期的更新中遴选 **1 个最具有架构影响力的技术突破/论文/开源重构**（如：某个重要系统的 Prefill/Decode 优化、新指令集扩展、重磅内核 Patch 或 FlashAttention 级突破）。
+- 进行 300 字左右的架构级深度分析，阐述其**微架构影响、Bottleneck 突破逻辑与性能收益**。
 
-4. **🛠️ 系统性能调优与 Kernel 内核**
-   - 关注：Linux Kernel 关键性能 Patch、eBPF 监控实践、NUMA / 内存管理 (THP/PAGE_SIZE) 调优、perf / Ftrace / VTune 抓取与调优案例。
+#### 🧠 1. LLM 系统与推理/训练加速 (LLM Infra & Acceleration)
+- 关注：大模型推理引擎（vLLM, SGLang, TensorRT-LLM）、分布式并行（Tensor/Pipeline/Context Parallelism, SUMMA）、Quantization (FP8/FP4/AWQ)、GPU 内存带宽/KV Cache 优化。
 
-5. **📄 必读前沿论文与开源项目**
-   - 整理 2-3 篇来自 arXiv、ISCA、MICRO、ASPLOS、OSDI、MLSys 的最新论文/开源仓库，附带简要技术分析与链接。
+#### 🚀 2. 体系结构与芯片动态 (Silicon & Microarchitecture)
+- 关注：CPU/GPU/NPU/TPU 最新微架构、指令集扩展（RISC-V/AVX-512/AMX/SVE/SME）、流水线/Cache/Interconnect 设计。
+
+#### ⚡ 3. 高性能计算与编译优化 (HPC & Compilers)
+- 关注：LLVM/GCC 优化 Passes、MLIR 编译器、CUDA/ROCm 编程模型、Auto-vectorization/SIMD 优化。
+
+#### 🛠️ 4. 系统性能调优与 Kernel (Kernel & Performance)
+- 关注：Linux Kernel 关键性能 Patch、eBPF 观察与安全、NUMA/内存管理调优、perf / Ftrace / VTune 调优实战。
+
+#### 📄 5. 必读前沿论文与开源仓库 (ArXiv & Open Source)
+- 精选 1-2 篇 ArXiv 最新论文或 GitHub 热门性能工具仓库，附带简要技术点评估与链接。
 
 ---
 
 ### 💡 输出要求：
-- **拒绝陈旧的泛泛科普**：必须包含具体的技术细节（如具体的指令集、代码分支、内核 Patch 号、微架构参数、数学/算法公式或参数对比）。
-- **必须附带来源/仓库链接**：每条动态末尾需标注信息出处或 GitHub/ArXiv 链接。
-- 排版请使用标准 Markdown 格式，保持层级分明、阅读舒适。
+1. **拒绝对话式废话与陈旧科普**：直奔主题，包含具体的技术细节（如具体的指令集、代码分支、内核 Patch 号、微架构参数、数学/算法公式或参数对比）。
+2. **附带实用干货**：如适用，请附带 1-2 行实用的 `perf` 诊断命令、vLLM 参数配置或编译 Flag。
+3. **出处标注**：每条资讯末尾须带上 [来源/GitHub/ArXiv] 链接。
+4. 使用结构清晰的 Markdown 格式输出。
 """
 
     try:
@@ -75,7 +82,7 @@ def generate_briefing():
             temperature=0.6,
             stream=False
         )
-        print("✅ 最新简报生成成功！")
+        print("✅ 最新 PerfPulse 简报生成成功！")
         return response.choices[0].message.content
     except Exception as e:
         print(f"❌ DeepSeek 生成简报失败: {str(e)}")
@@ -93,7 +100,7 @@ def send_email(subject, md_content):
 
     raw_html = markdown.markdown(
         md_content, 
-        extensions=['tables', 'fenced_code', 'codehilite', 'nl2br']
+        extensions=['tables', 'fenced_code', 'codehilite', 'nl2br', 'toc']
     )
     
     today_date = datetime.now().strftime("%Y-%m-%d")
@@ -186,10 +193,10 @@ def send_email(subject, md_content):
         }}
         blockquote {{
           margin: 16px 0;
-          padding: 4px 16px;
-          color: #475569;
+          padding: 8px 16px;
+          color: #334155;
           border-left: 4px solid #6366f1;
-          background: #eeef2e10;
+          background: #f0f4ff;
           border-radius: 0 6px 6px 0;
         }}
         a {{
@@ -214,13 +221,13 @@ def send_email(subject, md_content):
       <div class="container">
         <div class="header">
           <h1>⚡ PerfPulse 每日技术与架构简报</h1>
-          <div class="subtitle">日期：{today_date} | 聚焦 LLM 系统加速 · CPU/GPU 微架构 · HPC 编译优化 · Linux Kernel</div>
+          <div class="subtitle">发布日期：{today_date} | 聚焦 LLM 系统加速 · CPU/GPU 微架构 · HPC 编译优化 · Linux Kernel</div>
         </div>
         <div class="content">
           {raw_html}
         </div>
         <div class="footer">
-          由 DeepSeek & PerfPulse 自动化驱动构建 | 持续追踪全球顶级硬件与系统前沿
+          由 DeepSeek & PerfPulse 自动化驱动构建 | 保持对底层技术的终极好奇
         </div>
       </div>
     </body>
