@@ -1,16 +1,23 @@
 import os
 import sys
-import requests
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from openai import OpenAI
+import markdown
 
-# 环境变量读取
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("LLM_API_KEY")
-PUSHPLUS_TOKEN = os.environ.get("PUSHPLUS_TOKEN")
+# 读取环境变量
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "465"))
+EMAIL_SENDER = os.environ.get("EMAIL_SENDER")
+EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD")
+EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER") or EMAIL_SENDER
 
 def generate_briefing():
     print("1. 正在通过 DeepSeek 生成 EasyPerf 简报...")
     if not DEEPSEEK_API_KEY:
-        print("❌ 错误：未配置 DEEPSEEK_API_KEY 环境变量！")
+        print("❌ 错误：未配置 DEEPSEEK_API_KEY！")
         sys.exit(1)
 
     client = OpenAI(
@@ -33,39 +40,49 @@ def generate_briefing():
             temperature=0.7,
             stream=False
         )
-        md_content = response.choices[0].message.content
         print("✅ 简报生成成功！")
-        return md_content
+        return response.choices[0].message.content
     except Exception as e:
         print(f"❌ DeepSeek 生成简报失败: {str(e)}")
         sys.exit(1)
 
-def push_to_personal_wechat(title, content):
-    print("2. 正在通过 PushPlus 推送至个人微信...")
-    if not PUSHPLUS_TOKEN:
-        print("❌ 错误：未配置 PUSHPLUS_TOKEN 环境变量！")
+def send_email(subject, md_content):
+    print("2. 正在通过 Gmail SMTP 发送邮件...")
+    if not all([EMAIL_SENDER, EMAIL_PASSWORD, EMAIL_RECEIVER]):
+        print("❌ 错误：缺少邮箱环境变量配置（EMAIL_SENDER / EMAIL_PASSWORD）！")
         sys.exit(1)
 
-    url = "http://www.pushplus.plus/send"
-    payload = {
-        "token": PUSHPLUS_TOKEN,
-        "title": title,
-        "content": content,
-        "template": "markdown"
-    }
+    # 将 Markdown 转换为易读的 HTML 格式
+    html_body = markdown.markdown(md_content, extensions=['tables', 'fenced_code'])
+    styled_html = f"""
+    <html>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #24292e; padding: 20px; max-width: 800px; margin: 0 auto;">
+        {html_body}
+      </body>
+    </html>
+    """
+
+    message = MIMEMultipart()
+    message["From"] = EMAIL_SENDER
+    message["To"] = EMAIL_RECEIVER
+    message["Subject"] = subject
+    message.attach(MIMEText(styled_html, "html", "utf-8"))
 
     try:
-        response = requests.post(url, json=payload, timeout=20)
-        res_data = response.json()
-        if res_data.get("code") == 200:
-            print("🎉 简报已成功推送至你的个人微信！")
+        if EMAIL_PORT == 465:
+            server = smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, timeout=20)
         else:
-            print(f"❌ PushPlus 推送失败: {res_data.get('msg')}")
-            sys.exit(1)
+            server = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=20)
+            server.starttls()
+
+        server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+        server.sendmail(EMAIL_SENDER, [EMAIL_RECEIVER], message.as_string())
+        server.quit()
+        print("🎉 简报已成功发送至你的 Gmail 邮箱！")
     except Exception as e:
-        print(f"❌ 连接 PushPlus API 失败: {str(e)}")
+        print(f"❌ 邮件发送失败: {str(e)}")
         sys.exit(1)
 
 if __name__ == "__main__":
-    md_text = generate_briefing()
-    push_to_personal_wechat("【EasyPerf】每日硬件与系统性能简报", md_text)
+    content = generate_briefing()
+    send_email("【EasyPerf】每日硬件与系统性能简报", content)
