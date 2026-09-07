@@ -11,7 +11,7 @@ from openai import OpenAI
 APP_ID = os.environ.get("WECHAT_APP_ID")
 APP_SECRET = os.environ.get("WECHAT_APP_SECRET")
 THUMB_MEDIA_ID = os.environ.get("WECHAT_THUMB_MEDIA_ID")
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("LLM_API_KEY")
 SCF_PROXY_URL = os.environ.get("SCF_PROXY_URL") # 腾讯云函数 URL
 
 # 1. 调用 DeepSeek 生成 EasyPerf 风格简报
