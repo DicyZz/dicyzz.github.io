@@ -16,7 +16,7 @@ EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")
 
 def generate_briefing():
-    print("1. 正在通过 DeepSeek 抓取与汇总最新 EasyPerf + LLM 架构技术简报...")
+    print("1. 正在通过 DeepSeek 抓取与汇总最新 PerfPulse 技术简报...")
     if not DEEPSEEK_API_KEY:
         print("❌ 错误：未配置 DEEPSEEK_API_KEY！")
         sys.exit(1)
@@ -28,10 +28,9 @@ def generate_briefing():
 
     today_str = datetime.now().strftime("%Y年%m月%d日")
 
-    # 强化 Prompt：明确指定前沿来源网站 + 加入 LLM 系统与硬件加速板块
     prompt = f"""
-你是一位专注于计算机体系结构、高性能计算（HPC）、LLM系统架构与系统性能优化的资深专家。
-今天是 {today_str}。请检索并整理**最新**（近 24-48 小时内）的全网最前沿技术动态，生成一份专业的【EasyPerf 每日技术简报】。
+你是一位专注于计算机体系结构、高性能计算（HPC）、LLM 系统架构与系统性能优化的资深专家。
+今天是 {today_str}。请检索并整理**最新**（近 24-48 小时内）的全网最前沿技术动态，生成一份专业的【PerfPulse 每日技术简报】。
 
 ### 📌 强制数据检索来源参考：
 - **体系结构与硬件**：Phoronix, AnandTech, Chips and Cheese, ServeTheHome, IEEE Micro, Hot Chips
@@ -43,7 +42,7 @@ def generate_briefing():
 
 ### 📝 请按以下 5 个核心板块输出内容：
 
-1. **🧠 LLM 系统与推理/训练加速 (NEW)**
+1. **🧠 LLM 系统与推理/训练加速**
    - 关注：大模型推理引擎（vLLM, TensorRT-LLM, SGLang）、分布式并行算法（Tensor/Pipeline/Context Parallelism, SUMMA）、FlashAttention/FlashDecoding、量化技术（FP8/FP4/AWQ/GPTQ）及 GPU/NPU 内存带宽 bottlenecks（Prefill/Decode 阶段优化）。
 
 2. **🚀 计算机体系结构与芯片动态**
@@ -92,7 +91,6 @@ def send_email(subject, md_content):
         print("❌ 错误：缺少邮箱环境变量配置（EMAIL_SENDER / EMAIL_PASSWORD）！")
         sys.exit(1)
 
-    # 解析 Markdown
     raw_html = markdown.markdown(
         md_content, 
         extensions=['tables', 'fenced_code', 'codehilite', 'nl2br']
@@ -100,7 +98,6 @@ def send_email(subject, md_content):
     
     today_date = datetime.now().strftime("%Y-%m-%d")
 
-    # 极简高颜值邮件模板 (GitHub / Notion Dark Header 风格)
     styled_html = f"""
     <!DOCTYPE html>
     <html>
@@ -216,14 +213,14 @@ def send_email(subject, md_content):
     <body>
       <div class="container">
         <div class="header">
-          <h1>⚡ EasyPerf 每日技术与架构简报</h1>
+          <h1>⚡ PerfPulse 每日技术与架构简报</h1>
           <div class="subtitle">日期：{today_date} | 聚焦 LLM 系统加速 · CPU/GPU 微架构 · HPC 编译优化 · Linux Kernel</div>
         </div>
         <div class="content">
           {raw_html}
         </div>
         <div class="footer">
-          由 DeepSeek & EasyPerf 自动化驱动构建 | 持续追踪全球顶级硬件与系统前沿
+          由 DeepSeek & PerfPulse 自动化驱动构建 | 持续追踪全球顶级硬件与系统前沿
         </div>
       </div>
     </body>
@@ -246,11 +243,11 @@ def send_email(subject, md_content):
         server.login(sender, EMAIL_PASSWORD.strip())
         server.sendmail(sender, [receiver], message.as_string())
         server.quit()
-        print("🎉 高颜值 EasyPerf + LLM 简报已成功发送至你的 Gmail 邮箱！")
+        print("🎉 高颜值 PerfPulse 简报已成功发送至你的 Gmail 邮箱！")
     except Exception as e:
         print(f"❌ 邮件发送失败: {str(e)}")
         sys.exit(1)
 
 if __name__ == "__main__":
     content = generate_briefing()
-    send_email("【EasyPerf】每日硬件、系统与 LLM 性能简报", content)
+    send_email("【PerfPulse】每日硬件、系统与 LLM 性能简报", content)
