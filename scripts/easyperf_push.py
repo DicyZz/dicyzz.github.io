@@ -56,7 +56,7 @@ def generate_briefing():
    - 关注：Linux Kernel 关键性能 Patch、eBPF 监控实践、NUMA / 内存管理 (THP/PAGE_SIZE) 调优、perf / Ftrace / VTune 抓取与调优案例。
 
 5. **📄 必读前沿论文与开源项目**
-   - 整理 1-2 篇来自 arXiv、ISCA、MICRO、ASPLOS、OSDI、MLSys 的最新论文/开源仓库，附带简要技术分析与链接。
+   - 整理 2-3 篇来自 arXiv、ISCA、MICRO、ASPLOS、OSDI、MLSys 的最新论文/开源仓库，附带简要技术分析与链接。
 
 ---
 
