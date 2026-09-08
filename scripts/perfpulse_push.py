@@ -1,7 +1,6 @@
 import os
 import sys
 import smtplib
-import re
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -81,7 +80,7 @@ Phoronix, It's FOSS News, Slashdot, Alltop Linux, Narkive, DZone, Packet Storm S
 在“今日深度剖析”之后按以下格式插入：
 > 🎙️ **PerfPulse 3分钟音频架构解读**  
 > 🎧 **主题**：[填写今日深度剖析的核心主题]  
-> 💡 *提示：微信端请通过下方文字链接查看完整深度剖析或使用语音朗读功能收听。*
+> 💡 *提示：点击上方播放按钮，在通勤路上听完今日最核心的微架构瓶颈突破逻辑。*
 
 ---
 
@@ -220,24 +219,6 @@ Perf/eBPF 诊断、Kernel Patch 与性能调优细节，末尾带上 [来源] �
         print(f"❌ DeepSeek 生成简报失败: {str(e)}")
         sys.exit(1)
 
-def fix_wechat_links(html_content):
-    """
-    公众号适配关键函数：
-    微信对外部超链接会强制拦截。这里将 <a href="URL">TEXT</a> 自动转换为：
-    TEXT (URL) 格式，保证复制到公众号后读者能直接复制网址，同时在邮件中依然保留链接形式。
-    """
-    pattern = r'<a\s+[^>]*href=["\'](https?://[^"\']+)["\'][^>]*>(.*?)</a>'
-    
-    def replace_link(match):
-        url = match.group(1)
-        text = match.group(2)
-        # 如果链接文字已经包含该 URL，则不重复显示
-        if url in text:
-            return f'<span style="color: #4f46e5; font-weight: 600;">{text}</span>'
-        return f'<span style="color: #4f46e5; font-weight: 600;">{text}</span><span style="font-size: 12px; color: #64748b; word-break: break-all;"> ({url})</span>'
-    
-    return re.sub(pattern, replace_link, html_content)
-
 def send_email(subject, md_content):
     print("2. 正在渲染适配微信公众号排版的高颜值 HTML 邮件...")
 
@@ -253,12 +234,8 @@ def send_email(subject, md_content):
         extensions=['tables', 'fenced_code', 'codehilite', 'nl2br', 'toc']
     )
 
-    # 处理公众号外链转换问题
-    raw_html = fix_wechat_links(raw_html)
-
     today_date = datetime.now().strftime("%Y-%m-%d")
 
-    # 专门为公众号贴入优化的外层结构（取消固定宽度 680px 限制，内衬 100% 满屏适配，加入 box-sizing）
     styled_html = f"""
 <!DOCTYPE html>
 <html>
@@ -345,13 +322,25 @@ def send_email(subject, md_content):
       line-height: 1.75;
       text-align: justify;
     }}
+    /* ------------------------------------------------------------------- */
+    /* 专为公众号与邮件优化的图片样式 */
+    /* ------------------------------------------------------------------- */
     img {{
+      display: block !important;
       max-width: 100% !important;
       height: auto !important;
-      border-radius: 6px;
-      margin: 16px 0;
-      display: block;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      margin: 20px auto !important;
+      border-radius: 8px !important;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+      border: 1px solid #e2e8f0 !important;
+    }}
+    /* 恢复原生超链接外观，强调紫蓝色极客科技感 */
+    a {{
+      color: #4f46e5 !important;
+      text-decoration: none !important;
+      font-weight: 500 !important;
+      border-bottom: 1px dashed #6366f1 !important;
+      word-break: break-all !important;
     }}
     code {{
       background-color: #f1f5f9;
