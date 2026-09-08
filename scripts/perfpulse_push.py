@@ -67,3 +67,7 @@ def generate_briefing():
    > 🎙️ **PerfPulse 3分钟音频架构解读**
    > 🎧 **主题**：[填写今日深度剖析的核心主题]
    > 💡 *提示：点击上方播放按钮，在通勤路上听完今日最核心的微架构瓶颈突破逻辑。（在公众号发布时，可在公众号后台插入对应的音频文件）*
+
+if __name__ == "__main__":
+    content = generate_briefing()
+    send_email("【PerfPulse】每日硬件、系统与 LLM 性能简报", content)
