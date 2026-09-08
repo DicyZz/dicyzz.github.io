@@ -6,6 +6,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from openai import OpenAI
 import markdown
+from premailer import transform
 
 # 读取环境变量
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
@@ -89,7 +90,7 @@ def generate_briefing():
         sys.exit(1)
 
 def send_email(subject, md_content):
-    print("2. 正在渲染高颜值 HTML 邮件并发送至 Gmail...")
+    print("2. 正在渲染高颜值 HTML 邮件并自动内联 CSS...")
     
     sender = EMAIL_SENDER.strip() if EMAIL_SENDER else ""
     receiver = EMAIL_RECEIVER.strip() if EMAIL_RECEIVER else sender
@@ -105,6 +106,7 @@ def send_email(subject, md_content):
     
     today_date = datetime.now().strftime("%Y-%m-%d")
 
+    # 包含兼容公众号和邮箱的 CSS 样式表
     styled_html = f"""
     <!DOCTYPE html>
     <html>
@@ -116,62 +118,63 @@ def send_email(subject, md_content):
           background-color: #f6f8fa;
           color: #24292e;
           margin: 0;
-          padding: 20px;
+          padding: 10px;
         }}
         .container {{
-          max-width: 820px;
+          max-width: 800px;
           margin: 0 auto;
           background: #ffffff;
           border: 1px solid #e1e4e8;
           border-radius: 12px;
           overflow: hidden;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.06);
         }}
         .header {{
-          background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+          background-color: #0f172a;
           color: #ffffff;
-          padding: 30px 36px;
+          padding: 24px 30px;
         }}
         .header h1 {{
           margin: 0;
-          font-size: 25px;
+          font-size: 22px;
           font-weight: 700;
-          letter-spacing: -0.5px;
+          color: #ffffff;
         }}
         .header .subtitle {{
-          margin-top: 10px;
+          margin-top: 8px;
           font-size: 13px;
           color: #a5b4fc;
           line-height: 1.5;
         }}
         .content {{
-          padding: 36px;
+          padding: 28px 30px;
           font-size: 15px;
           line-height: 1.75;
+          color: #334155;
         }}
         h2 {{
           color: #0f172a;
-          font-size: 19px;
+          font-size: 18px;
           border-bottom: 2px solid #e2e8f0;
-          padding-bottom: 8px;
-          margin-top: 32px;
-          margin-bottom: 16px;
+          padding-bottom: 6px;
+          margin-top: 28px;
+          margin-bottom: 14px;
         }}
         h3 {{
           font-size: 16px;
           color: #1e293b;
-          margin-top: 22px;
+          margin-top: 20px;
+          margin-bottom: 10px;
         }}
         p {{
           margin: 12px 0;
           color: #334155;
         }}
         ul, ol {{
-          padding-left: 22px;
+          padding-left: 20px;
           margin: 12px 0;
         }}
         li {{
-          margin-bottom: 8px;
+          margin-bottom: 6px;
           color: #334155;
         }}
         code {{
@@ -185,18 +188,19 @@ def send_email(subject, md_content):
         pre {{
           background-color: #0f172a;
           color: #f8fafc;
-          padding: 16px;
+          padding: 14px;
           border-radius: 8px;
           overflow-x: auto;
           font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
           font-size: 13px;
+          line-height: 1.5;
         }}
         blockquote {{
           margin: 16px 0;
           padding: 8px 16px;
           color: #334155;
           border-left: 4px solid #6366f1;
-          background: #f0f4ff;
+          background-color: #f0f4ff;
           border-radius: 0 6px 6px 0;
         }}
         a {{
@@ -204,13 +208,10 @@ def send_email(subject, md_content):
           text-decoration: none;
           font-weight: 500;
         }}
-        a:hover {{
-          text-decoration: underline;
-        }}
         .footer {{
           background-color: #f8fafc;
           border-top: 1px solid #e2e8f0;
-          padding: 18px 36px;
+          padding: 16px 30px;
           text-align: center;
           font-size: 12px;
           color: #94a3b8;
@@ -234,11 +235,15 @@ def send_email(subject, md_content):
     </html>
     """
 
+    # 【关键处理】自动将 <style> 中的样式转为 style="..." 属性嵌到每个 HTML 元素上
+    print("3. 正在使用 Premailer 将样式转换为内联属性（兼容公众号直接复制）...")
+    inlined_html = transform(styled_html)
+
     message = MIMEMultipart()
     message["From"] = sender
     message["To"] = receiver
     message["Subject"] = f"{subject} ({today_date})"
-    message.attach(MIMEText(styled_html, "html", "utf-8"))
+    message.attach(MIMEText(inlined_html, "html", "utf-8"))
 
     try:
         if EMAIL_PORT == 465:
@@ -250,7 +255,7 @@ def send_email(subject, md_content):
         server.login(sender, EMAIL_PASSWORD.strip())
         server.sendmail(sender, [receiver], message.as_string())
         server.quit()
-        print("🎉 高颜值 PerfPulse 简报已成功发送至你的 Gmail 邮箱！")
+        print("🎉 高颜值且支持公众号无缝复制的 PerfPulse 简报已成功发送！")
     except Exception as e:
         print(f"❌ 邮件发送失败: {str(e)}")
         sys.exit(1)
