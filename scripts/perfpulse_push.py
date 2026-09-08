@@ -313,19 +313,20 @@ message["Subject"] = f"{subject} ({today_date})"
 message.attach(MIMEText(inlined_html, "html", "utf-8"))
 
 try:
-    if EMAIL_PORT == 465:
-        server = smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, timeout=20)
-    else:
-        server = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=20)
-        server.starttls()
-
-    server.login(sender, EMAIL_PASSWORD.strip())
-    server.sendmail(sender, [receiver], message.as_string())
-    server.quit()
-    print("🎉 包含全量 News 书签数据源的 PerfPulse 简报已成功发送！")
-except Exception as e:
-    print(f"❌ 邮件发送失败: {str(e)}")
-    sys.exit(1)
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": "你是一个极具技术深度的系统与大模型硬件性能架构师，善于追踪并精炼最前沿的技术情报，且熟知公众号与极客社区的高质量排版习惯。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.6,
+            stream=False
+        )
+        print("✅ 最新 PerfPulse 简报生成成功！")
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"❌ DeepSeek 生成简报失败: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     content = generate_briefing()
