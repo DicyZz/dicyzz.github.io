@@ -32,11 +32,21 @@ def generate_briefing():
         base_url="https://api.deepseek.com"
     )
 
-    today_str = datetime.now().strftime("%Y年%m月%d日")
+    # 动态获取当前精确日期与时间
+    now = datetime.now()
+    today_str = now.strftime("%Y年%m月%d日")
+    exact_iso_time = now.strftime("%Y-%m-%d %H:%M:%S")
 
     prompt = f"""
 你是一位专注于计算机体系结构、高性能计算（HPC）、LLM 系统架构与系统性能调优的顶级资深架构师。
-今天是 {today_str}。请生成一份专业的【PerfPulse 每日技术简报】。
+当前系统时间：{exact_iso_time}。今天是 {today_str}。
+
+### 核心任务：
+请为 {today_str} 生成一份最新的【PerfPulse 每日技术简报】。
+
+### 时效性与最新内容强制约束（CRITICAL）：
+1. 必须聚焦近期的最新行业动态、最新 Commit、最新的论文/Patch 与 Benchmark。
+2. 严禁生成过时的常识性科普，严禁撰写虚假或过期的技术新闻。
 
 ---
 
@@ -44,24 +54,15 @@ def generate_briefing():
 
 #### LLM 系统与 AI Infra
 vLLM / SGLang GitHub & Blog, PyTorch Engineering Blog, NVIDIA Technical Blog, Tri Dao (FlashAttention) 动态, ArXiv (`cs.AR`, `cs.DC`, `cs.CL`), SemiAnalysis.
-Understanding AI, TechCrunch AI, Ars Technica.
-
----
 
 #### 体系结构与芯片/IP 微架构
-Chips and Cheese, ServeTheHome, RISC-V International, ACM SIGARCH, IEEE Micro.
-SemiEngineering, Hardware Times, WikiChip ARM, AnandTech, Design & Reuse, EET China, Doulos, Tom's Hardware, ASCII.jp.
-
----
+Chips and Cheese, ServeTheHome, RISC-V International, ACM SIGARCH, IEEE Micro, AnandTech, WikiChip ARM.
 
 #### HPC 与编译优化
 LLVM Discourse/Commits, GCC Mailing List, MLIR News, TVM Discourse, OneAPI / ROCm Release Notes.
 
----
-
 #### Linux 内核与系统性能调优
-LWN.net, LKML, Brendan Gregg's Blog, ebpf.io, Cloudflare / Netflix TechBlog.
-Phoronix, It's FOSS News, Slashdot, Alltop Linux, Narkive, DZone, Packet Storm Security.
+LWN.net, LKML, Brendan Gregg's Blog, ebpf.io, Cloudflare / Netflix TechBlog, Phoronix.
 
 ---
 
@@ -69,20 +70,14 @@ Phoronix, It's FOSS News, Slashdot, Alltop Linux, Narkive, DZone, Packet Storm S
 
 #### 科技图表
 首图：![Banner](https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1000&q=80)
-
 芯片微架构插图：![Microarchitecture](https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1000&q=80)
-
 系统调优插图：![System Performance](https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1000&q=80)
-
----
 
 #### 音频/播客解读卡片
 在“今日深度剖析”之后按以下格式插入：
 > 🎙️ **PerfPulse 3分钟音频架构解读**  
 > 🎧 **主题**：[填写今日深度剖析的核心主题]  
 > 💡 *提示：点击上方播放按钮，在通勤路上听完今日最核心的微架构瓶颈突破逻辑。*
-
----
 
 #### 视频/论文演示卡片
 若有视频/ Talk，按以下格式插入：
@@ -92,10 +87,10 @@ Phoronix, It's FOSS News, Slashdot, Alltop Linux, Narkive, DZone, Packet Storm S
 
 ---
 
-### 排版与输出约束条件（非常重要）：
-1. **绝对禁止符号**：严禁使用任何项目符号（如 `-`、`*`、`+`）或任何数字序号（如 `1.`、`2.`、`(1)`）。
-2. **板块扩充规则**：除 TL;DR 外，其余每个核心板块（LLM系统、体系结构、HPC编译、系统调优、论文/开源）必须精确包含 **3 个** 独立的技术看点。
-3. **三点排版规则**：这 3 个技术看点必须**分别直接将看点主题提炼并升级为独立子标题**（使用 `###` 或 `####`），下方紧跟具体技术细节与来源链接，板块与看点之间保持良好的间距。
+### 干货专区与格式规范（必须严格执行）：
+1. **干货代码块规范**：所有 perf 诊断命令、sysctl 参数、LLVM 编译 Flag、C++/Python/Rust 代码片段，必须且只能包裹在标准的 Markdown 围栏代码块中（例如 ```bash、```cpp、```python），严禁使用内联杂乱文本混排。
+2. **绝对禁止符号**：全局严禁使用任何项目符号（如 `-`、`*`、`+`）或数字列表序号（如 `1.`、`2.`）。
+3. **三点排版规则**：除 TL;DR 外，其余每个核心板块必须精确包含 **3 个** 独立的技术看点，看点必须**直接提炼为独立子标题**（使用 `###`）。
 
 ---
 
@@ -105,7 +100,7 @@ Phoronix, It's FOSS News, Slashdot, Alltop Linux, Narkive, DZone, Packet Storm S
 ## 30 秒极速看点 (TL;DR)
 
 ### 突破/论文/开源发布
-一句话总结今日最震撼的突破/论文/开源发布。
+一句话总结最新震撼的突破/论文/开源发布。
 
 ### 芯片与 LLM 引擎收益
 一句话总结芯片或 LLM 引擎的核心性能收益。
@@ -182,15 +177,6 @@ Perf/eBPF 诊断、Kernel Patch 与性能调优细节，末尾带上 [来源] �
 
 ### [项目/论文三短标题]
 核心创新点、性能 Benchmark、开源地址或 ArXiv 链接。
-
----
-
-### 代码与干货要求：
-代码与命令包裹：所有 perf 诊断脚本、vLLM 参数、LLVM 编译 Flag 和代码片段，必须明确包裹在 Markdown 代码块中。
-
-拒绝陈旧科普：直奔主题，输出具体参数、指令集、Patch 号、性能提升百分比数据。
-
-出处标注：每条资讯末尾须带上 [来源/GitHub/ArXiv] 链接。
 """
 
     try:
@@ -200,7 +186,7 @@ Perf/eBPF 诊断、Kernel Patch 与性能调优细节，末尾带上 [来源] �
                 {"role": "system", "content": "你是一个极具技术深度的系统与大模型硬件性能架构师，善于追踪并精炼最前沿的技术情报，且熟知公众号与极客社区的高质量排版习惯。"},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.6,
+            temperature=0.5,
             stream=False
         )
         
@@ -322,9 +308,6 @@ def send_email(subject, md_content):
       line-height: 1.75;
       text-align: justify;
     }}
-    /* ------------------------------------------------------------------- */
-    /* 专为公众号与邮件优化的图片样式 */
-    /* ------------------------------------------------------------------- */
     img {{
       display: block !important;
       max-width: 100% !important;
@@ -334,7 +317,6 @@ def send_email(subject, md_content):
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
       border: 1px solid #e2e8f0 !important;
     }}
-    /* 恢复原生超链接外观，强调紫蓝色极客科技感 */
     a {{
       color: #4f46e5 !important;
       text-decoration: none !important;
@@ -351,25 +333,28 @@ def send_email(subject, md_content):
       font-size: 88%;
       font-weight: 600;
     }}
+    /* ------------------------------------------------------------------- */
+    /* 干货代码块精细化调优（黑客暗色高亮） */
+    /* ------------------------------------------------------------------- */
     pre {{
-      background-color: #0f172a;
-      color: #f8fafc;
-      padding: 14px;
-      border-radius: 6px;
-      overflow-x: auto;
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-      font-size: 12px;
-      line-height: 1.6;
-      margin: 16px 0;
-      border: 1px solid #1e293b;
-      white-space: pre-wrap;
-      word-break: break-all;
+      background-color: #0f172a !important;
+      color: #f8fafc !important;
+      padding: 14px !important;
+      border-radius: 6px !important;
+      overflow-x: auto !important;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace !important;
+      font-size: 12px !important;
+      line-height: 1.6 !important;
+      margin: 16px 0 !important;
+      border: 1px solid #1e293b !important;
+      white-space: pre-wrap !important;
+      word-break: break-all !important;
     }}
     pre code {{
-      background-color: transparent;
-      color: #f8fafc;
-      padding: 0;
-      font-weight: normal;
+      background-color: transparent !important;
+      color: #f8fafc !important;
+      padding: 0 !important;
+      font-weight: normal !important;
     }}
     blockquote {{
       margin: 20px 0;
