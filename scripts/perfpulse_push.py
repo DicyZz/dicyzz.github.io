@@ -40,67 +40,106 @@ def generate_briefing():
 
 ---
 
-### 📌 强制对标来源领域：
+### 强制对标来源领域：
 
-1. **LLM 系统 & AI Infra**：
-   - vLLM / SGLang GitHub & Blog, PyTorch Engineering Blog, NVIDIA Technical Blog, Tri Dao (FlashAttention) 动态, ArXiv (`cs.AR`, `cs.DC`, `cs.CL`), SemiAnalysis.
-   - Understanding AI, TechCrunch AI, Ars Technica.
-
-2. **体系结构 & 芯片/IP 微架构**：
-   - Chips and Cheese, ServeTheHome, RISC-V International, ACM SIGARCH, IEEE Micro.
-   - SemiEngineering, Hardware Times, WikiChip ARM, AnandTech, Design & Reuse, EET China, Doulos, Tom's Hardware, ASCII.jp.
-
-3. **HPC & 编译优化**：
-   - LLVM Discourse/Commits, GCC Mailing List, MLIR News, TVM Discourse, OneAPI / ROCm Release Notes.
-
-4. **Linux 内核 & 系统性能调优**：
-   - LWN.net, LKML, Brendan Gregg's Blog, ebpf.io, Cloudflare / Netflix TechBlog.
-   - Phoronix, It's FOSS News, Slashdot, Alltop Linux, Narkive, DZone, Packet Storm Security.
+#### LLM 系统与 AI Infra
+vLLM / SGLang GitHub & Blog, PyTorch Engineering Blog, NVIDIA Technical Blog, Tri Dao (FlashAttention) 动态, ArXiv (`cs.AR`, `cs.DC`, `cs.CL`), SemiAnalysis.
+Understanding AI, TechCrunch AI, Ars Technica.
 
 ---
 
-### 🖼️ 多媒体与交互元素插入要求：
-
-1. **科技图表**：
-   - 首图：![Banner](https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1000&q=80)
-   - 芯片微架构插图：![Microarchitecture](https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1000&q=80)
-   - 系统调优插图：![System Performance](https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1000&q=80)
-
-2. **音频/播客解读卡片**：
-   在“今日深度剖析”之后按以下格式插入：
-   > 🎙️ **PerfPulse 3分钟音频架构解读**  
-   > 🎧 **主题**：[填写今日深度剖析的核心主题]  
-   > 💡 *提示：点击上方播放按钮，在通勤路上听完今日最核心的微架构瓶颈突破逻辑。*
-
-3. **视频/论文演示卡片**：
-   若有视频/ Talk，按以下格式插入：
-   > 🎬 **视频演示 / Talk 推荐**：  
-   > 🔗 **视频标题**：[视频/讲座名称]  
-   > 📌 **核心看点**：[1句话说明视频展示的 benchmark 跑分或 CPU/GPU 内存火焰图] [查看视频/演示链接](链接地址)
+#### 体系结构与芯片/IP 微架构
+Chips and Cheese, ServeTheHome, RISC-V International, ACM SIGARCH, IEEE Micro.
+SemiEngineering, Hardware Times, WikiChip ARM, AnandTech, Design & Reuse, EET China, Doulos, Tom's Hardware, ASCII.jp.
 
 ---
 
-📝 输出结构要求：
+#### HPC 与编译优化
+LLVM Discourse/Commits, GCC Mailing List, MLIR News, TVM Discourse, OneAPI / ROCm Release Notes.
+
+---
+
+#### Linux 内核与系统性能调优
+LWN.net, LKML, Brendan Gregg's Blog, ebpf.io, Cloudflare / Netflix TechBlog.
+Phoronix, It's FOSS News, Slashdot, Alltop Linux, Narkive, DZone, Packet Storm Security.
+
+---
+
+### 多媒体与交互元素插入要求：
+
+#### 科技图表
+首图：![Banner](https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1000&q=80)
+
+芯片微架构插图：![Microarchitecture](https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1000&q=80)
+
+系统调优插图：![System Performance](https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1000&q=80)
+
+---
+
+#### 音频/播客解读卡片
+在“今日深度剖析”之后按以下格式插入：
+> 🎙️ **PerfPulse 3分钟音频架构解读**  
+> 🎧 **主题**：[填写今日深度剖析的核心主题]  
+> 💡 *提示：点击上方播放按钮，在通勤路上听完今日最核心的微架构瓶颈突破逻辑。*
+
+---
+
+#### 视频/论文演示卡片
+若有视频/ Talk，按以下格式插入：
+> 🎬 **视频演示 / Talk 推荐**：  
+> 🔗 **视频标题**：[视频/讲座名称]  
+> 📌 **核心看点**：[1句话说明视频展示的 benchmark 跑分或 CPU/GPU 内存火焰图] [查看视频/演示链接](链接地址)
+
+---
+
+### 排版与输出结构要求：
 严格按以下结构输出 Markdown 内容（切勿在全局包裹 ```markdown 标记）：
+注意：禁止使用任何列表项目符号（如 -、*）或数字序号（如 1.、2.）。请将每一项的开头直接提炼并升级为独立标题（使用 ### 或 ####），且不同板块和卡片之间留出充足的垂直间距。
 
-💡 30 秒极速看点 (TL;DR)
-观点 1：一句话总结今日最震撼的突破/论文/开源发布。
-观点 2：一句话总结芯片或 LLM 引擎的核心性能收益。
-观点 3：一句话总结 Kernel 或编译调优干货。
+## 30 秒极速看点 (TL;DR)
 
-🌟 0. 今日深度剖析 (Today's Deep Dive)
+### 突破/论文/开源发布
+一句话总结今日最震撼的突破/论文/开源发布。
+
+### 芯片与 LLM 引擎收益
+一句话总结芯片或 LLM 引擎的核心性能收益。
+
+### Kernel 与编译调优干货
+一句话总结 Kernel 或编译调优干货。
+
+---
+
+## 今日深度剖析 (Today's Deep Dive)
 挑选 1 个最具有架构影响力的技术突破/论文/开源重构，进行 300 字左右的架构级深度分析（微架构影响、Bottleneck 突破逻辑与性能收益）。
 
-🧠 1. LLM 系统与推理/训练加速 (LLM Infra & Acceleration)
-🚀 2. 体系结构与芯片动态 (Silicon & Microarchitecture)
-⚡ 3. 高性能计算与编译优化 (HPC & Compilers)
-🛠️ 4. 系统性能调优与 Kernel (Kernel & Performance)
-📄 5. 必读前沿论文与开源仓库 (ArXiv & Open Source)
+---
 
-💡 代码与干货要求：
-- 代码与命令包裹：所有 perf 诊断脚本、vLLM 参数、LLVM 编译 Flag 和代码片段，必须明确包裹在 Markdown 代码块中。
-- 拒绝陈旧科普：直奔主题，输出具体参数、指令集、Patch 号、性能提升百分比数据。
-- 出处标注：每条资讯末尾须带上 [来源/GitHub/ArXiv] 链接。
+## LLM 系统与推理/训练加速 (LLM Infra & Acceleration)
+
+---
+
+## 体系结构与芯片动态 (Silicon & Microarchitecture)
+
+---
+
+## 高性能计算与编译优化 (HPC & Compilers)
+
+---
+
+## 系统性能调优与 Kernel (Kernel & Performance)
+
+---
+
+## 必读前沿论文与开源仓库 (ArXiv & Open Source)
+
+---
+
+### 代码与干货要求：
+代码与命令包裹：所有 perf 诊断脚本、vLLM 参数、LLVM 编译 Flag 和代码片段，必须明确包裹在 Markdown 代码块中。
+
+拒绝陈旧科普：直奔主题，输出具体参数、指令集、Patch 号、性能提升百分比数据。
+
+出处标注：每条资讯末尾须带上 [来源/GitHub/ArXiv] 链接。
 """
 
     try:
@@ -158,7 +197,7 @@ def send_email(subject, md_content):
       background-color: #f4f6f8;
       color: #24292e;
       margin: 0;
-      padding: 8px;
+      padding: 12px;
     }}
     .container {{
       max-width: 680px;
@@ -171,65 +210,66 @@ def send_email(subject, md_content):
     .header {{
       background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
       color: #ffffff;
-      padding: 28px 24px;
+      padding: 32px 28px;
       border-bottom: 3px solid #6366f1;
     }}
     .header h1 {{
       margin: 0;
-      font-size: 21px;
+      font-size: 22px;
       font-weight: 700;
       color: #ffffff;
       letter-spacing: 0.5px;
       line-height: 1.4;
     }}
     .header .subtitle {{
-      margin-top: 10px;
-      font-size: 12px;
+      margin-top: 12px;
+      font-size: 13px;
       color: #a5b4fc;
       line-height: 1.6;
     }}
     .content {{
-      padding: 20px 22px;
+      padding: 28px 30px;
       font-size: 15px;
       line-height: 1.8;
       color: #334155;
     }}
     h2 {{
       color: #0f172a;
-      font-size: 17px;
+      font-size: 18px;
       background: #f1f5f9;
       border-left: 5px solid #4f46e5;
-      padding: 8px 12px;
+      padding: 10px 14px;
       border-radius: 0 6px 6px 0;
-      margin-top: 32px;
-      margin-bottom: 16px;
+      margin-top: 48px;
+      margin-bottom: 24px;
     }}
     h3 {{
+      font-size: 16px;
+      color: #0f172a;
+      margin-top: 32px;
+      margin-bottom: 12px;
+      font-weight: 600;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 6px;
+    }}
+    h4 {{
       font-size: 15px;
       color: #1e293b;
-      margin-top: 22px;
+      margin-top: 24px;
       margin-bottom: 10px;
       font-weight: 600;
     }}
     p {{
-      margin: 12px 0;
+      margin: 16px 0 24px 0;
       color: #334155;
       word-wrap: break-word;
-    }}
-    ul, ol {{
-      padding-left: 18px;
-      margin: 12px 0;
-    }}
-    li {{
-      margin-bottom: 8px;
-      color: #334155;
-      line-height: 1.75;
+      line-height: 1.8;
     }}
     img {{
       max-width: 100%;
       height: auto;
       border-radius: 8px;
-      margin: 18px 0;
+      margin: 28px 0;
       display: block;
       box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }}
@@ -245,13 +285,13 @@ def send_email(subject, md_content):
     pre {{
       background-color: #0f172a;
       color: #f8fafc;
-      padding: 16px;
+      padding: 18px;
       border-radius: 8px;
       overflow-x: auto;
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
       font-size: 12.5px;
-      line-height: 1.6;
-      margin: 16px 0;
+      line-height: 1.65;
+      margin: 24px 0;
       border: 1px solid #1e293b;
     }}
     pre code {{
@@ -261,8 +301,8 @@ def send_email(subject, md_content):
       font-weight: normal;
     }}
     blockquote {{
-      margin: 16px 0;
-      padding: 12px 16px;
+      margin: 28px 0;
+      padding: 16px 20px;
       color: #1e293b;
       border-left: 4px solid #4f46e5;
       background-color: #f8fafc;
@@ -270,7 +310,7 @@ def send_email(subject, md_content):
       font-size: 14px;
     }}
     blockquote p {{
-      margin: 4px 0;
+      margin: 6px 0;
       color: #334155;
     }}
     a {{
@@ -279,10 +319,15 @@ def send_email(subject, md_content):
       font-weight: 500;
       border-bottom: 1px dashed #6366f1;
     }}
+    hr {{
+      border: none;
+      border-top: 1px dashed #cbd5e1;
+      margin: 40px 0;
+    }}
     .footer {{
       background-color: #f8fafc;
       border-top: 1px solid #e2e8f0;
-      padding: 18px 24px;
+      padding: 24px;
       text-align: center;
       font-size: 12px;
       color: #94a3b8;
