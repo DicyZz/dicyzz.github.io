@@ -326,6 +326,7 @@ try:
 except Exception as e:
     print(f"❌ 邮件发送失败: {str(e)}")
     sys.exit(1)
+
 if __name__ == "__main__":
     content = generate_briefing()
     send_email("【PerfPulse】每日硬件、系统与 LLM 性能简报", content)
