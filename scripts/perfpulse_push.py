@@ -1,6 +1,7 @@
 import os
 import sys
 import smtplib
+import re
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -80,7 +81,7 @@ Phoronix, It's FOSS News, Slashdot, Alltop Linux, Narkive, DZone, Packet Storm S
 在“今日深度剖析”之后按以下格式插入：
 > 🎙️ **PerfPulse 3分钟音频架构解读**  
 > 🎧 **主题**：[填写今日深度剖析的核心主题]  
-> 💡 *提示：点击上方播放按钮，在通勤路上听完今日最核心的微架构瓶颈突破逻辑。*
+> 💡 *提示：微信端请通过下方文字链接查看完整深度剖析或使用语音朗读功能收听。*
 
 ---
 
@@ -206,7 +207,6 @@ Perf/eBPF 诊断、Kernel Patch 与性能调优细节，末尾带上 [来源] �
         
         content = response.choices[0].message.content.strip()
 
-        # 清理外层可能多余包裹的代码块标记
         if content.startswith("```markdown"):
             content = content[11:]
         elif content.startswith("```"):
@@ -219,6 +219,24 @@ Perf/eBPF 诊断、Kernel Patch 与性能调优细节，末尾带上 [来源] �
     except Exception as e:
         print(f"❌ DeepSeek 生成简报失败: {str(e)}")
         sys.exit(1)
+
+def fix_wechat_links(html_content):
+    """
+    公众号适配关键函数：
+    微信对外部超链接会强制拦截。这里将 <a href="URL">TEXT</a> 自动转换为：
+    TEXT (URL) 格式，保证复制到公众号后读者能直接复制网址，同时在邮件中依然保留链接形式。
+    """
+    pattern = r'<a\s+[^>]*href=["\'](https?://[^"\']+)["\'][^>]*>(.*?)</a>'
+    
+    def replace_link(match):
+        url = match.group(1)
+        text = match.group(2)
+        # 如果链接文字已经包含该 URL，则不重复显示
+        if url in text:
+            return f'<span style="color: #4f46e5; font-weight: 600;">{text}</span>'
+        return f'<span style="color: #4f46e5; font-weight: 600;">{text}</span><span style="font-size: 12px; color: #64748b; word-break: break-all;"> ({url})</span>'
+    
+    return re.sub(pattern, replace_link, html_content)
 
 def send_email(subject, md_content):
     print("2. 正在渲染适配微信公众号排版的高颜值 HTML 邮件...")
@@ -235,69 +253,79 @@ def send_email(subject, md_content):
         extensions=['tables', 'fenced_code', 'codehilite', 'nl2br', 'toc']
     )
 
+    # 处理公众号外链转换问题
+    raw_html = fix_wechat_links(raw_html)
+
     today_date = datetime.now().strftime("%Y-%m-%d")
 
+    # 专门为公众号贴入优化的外层结构（取消固定宽度 680px 限制，内衬 100% 满屏适配，加入 box-sizing）
     styled_html = f"""
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
+    *, *:before, *:after {{
+      box-sizing: border-box !important;
+    }}
     body {{
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background-color: #f4f6f8;
+      font-family: -apple-system-font, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", Arial, sans-serif;
+      background-color: #ffffff;
       color: #24292e;
       margin: 0;
-      padding: 12px;
+      padding: 0;
+      width: 100% !important;
+      -webkit-text-size-adjust: 100%;
     }}
     .container {{
-      max-width: 680px;
+      width: 100% !important;
+      max-width: 100% !important;
       margin: 0 auto;
       background: #ffffff;
-      border-radius: 12px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
       overflow: hidden;
     }}
     .header {{
       background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
       color: #ffffff;
-      padding: 32px 28px;
+      padding: 24px 16px;
       border-bottom: 3px solid #6366f1;
     }}
     .header h1 {{
       margin: 0;
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 700;
       color: #ffffff;
       letter-spacing: 0.5px;
       line-height: 1.4;
     }}
     .header .subtitle {{
-      margin-top: 12px;
-      font-size: 13px;
+      margin-top: 10px;
+      font-size: 12px;
       color: #a5b4fc;
-      line-height: 1.6;
+      line-height: 1.5;
     }}
     .content {{
-      padding: 28px 30px;
+      padding: 16px 12px;
       font-size: 15px;
-      line-height: 1.8;
+      line-height: 1.75;
       color: #334155;
+      word-break: break-word;
     }}
     h2 {{
       color: #0f172a;
-      font-size: 18px;
+      font-size: 17px;
       background: #f1f5f9;
-      border-left: 5px solid #4f46e5;
-      padding: 10px 14px;
-      border-radius: 0 6px 6px 0;
-      margin-top: 48px;
-      margin-bottom: 24px;
+      border-left: 4px solid #4f46e5;
+      padding: 8px 12px;
+      border-radius: 0 4px 4px 0;
+      margin-top: 36px;
+      margin-bottom: 20px;
     }}
     h3 {{
       font-size: 16px;
       color: #0f172a;
-      margin-top: 32px;
+      margin-top: 28px;
       margin-bottom: 12px;
       font-weight: 600;
       border-bottom: 1px solid #e2e8f0;
@@ -306,44 +334,47 @@ def send_email(subject, md_content):
     h4 {{
       font-size: 15px;
       color: #1e293b;
-      margin-top: 24px;
+      margin-top: 20px;
       margin-bottom: 10px;
       font-weight: 600;
     }}
     p {{
-      margin: 16px 0 24px 0;
+      margin: 12px 0 16px 0;
       color: #334155;
       word-wrap: break-word;
-      line-height: 1.8;
+      line-height: 1.75;
+      text-align: justify;
     }}
     img {{
-      max-width: 100%;
-      height: auto;
-      border-radius: 8px;
-      margin: 28px 0;
+      max-width: 100% !important;
+      height: auto !important;
+      border-radius: 6px;
+      margin: 16px 0;
       display: block;
       box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }}
     code {{
-      background-color: #e2e8f0;
-      color: #0f172a;
-      padding: 2px 6px;
+      background-color: #f1f5f9;
+      color: #4f46e5;
+      padding: 2px 5px;
       border-radius: 4px;
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-      font-size: 85%;
+      font-size: 88%;
       font-weight: 600;
     }}
     pre {{
       background-color: #0f172a;
       color: #f8fafc;
-      padding: 18px;
-      border-radius: 8px;
+      padding: 14px;
+      border-radius: 6px;
       overflow-x: auto;
       font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-      font-size: 12.5px;
-      line-height: 1.65;
-      margin: 24px 0;
+      font-size: 12px;
+      line-height: 1.6;
+      margin: 16px 0;
       border: 1px solid #1e293b;
+      white-space: pre-wrap;
+      word-break: break-all;
     }}
     pre code {{
       background-color: transparent;
@@ -352,33 +383,27 @@ def send_email(subject, md_content):
       font-weight: normal;
     }}
     blockquote {{
-      margin: 28px 0;
-      padding: 16px 20px;
+      margin: 20px 0;
+      padding: 12px 14px;
       color: #1e293b;
       border-left: 4px solid #4f46e5;
       background-color: #f8fafc;
-      border-radius: 0 8px 8px 0;
+      border-radius: 0 6px 6px 0;
       font-size: 14px;
     }}
     blockquote p {{
-      margin: 6px 0;
+      margin: 4px 0;
       color: #334155;
-    }}
-    a {{
-      color: #4f46e5;
-      text-decoration: none;
-      font-weight: 500;
-      border-bottom: 1px dashed #6366f1;
     }}
     hr {{
       border: none;
       border-top: 1px dashed #cbd5e1;
-      margin: 40px 0;
+      margin: 32px 0;
     }}
     .footer {{
       background-color: #f8fafc;
       border-top: 1px solid #e2e8f0;
-      padding: 24px;
+      padding: 20px 12px;
       text-align: center;
       font-size: 12px;
       color: #94a3b8;
