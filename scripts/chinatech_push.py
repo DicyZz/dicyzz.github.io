@@ -56,6 +56,123 @@ MODULE_FEEDS = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# 1b. JSON 数据源（不走 RSS，直接请求官方/门户 JSON 接口）
+# ---------------------------------------------------------------------------
+JSON_FEEDS = {
+    "Tech_News": [
+        {
+            "name": "新浪科技滚动",
+            "type": "sina_roll",
+            "url": "https://feed.mix.sina.com.cn/api/roll/get?pageid=153&lid=2509&num=30",
+        },
+        {
+            "name": "36氪热榜",
+            "type": "36kr_hot",
+            "url": "https://gateway.36kr.com/api/mis/nav/home/nav/rank/hot",
+        },
+    ],
+}
+
+def is_recent_ts(ts, max_hours=168):
+    """按秒/毫秒时间戳判断是否在最近 max_hours 内"""
+    if not ts:
+        return True
+    try:
+        ts = float(ts)
+        if ts > 1e12:  # 毫秒
+            ts = ts / 1000.0
+        pub_time = datetime.fromtimestamp(ts, tz=timezone.utc)
+        now_time = datetime.now(timezone.utc)
+        return (now_time - pub_time) <= timedelta(hours=max_hours)
+    except Exception:
+        return True
+
+
+def fetch_json_source(source_config, category, max_items=6):
+    """抓取 JSON 接口源，规整成与 RSS 相同的条目文本格式"""
+    source_name = source_config.get("name", "JSON源")
+    source_type = source_config.get("type")
+    url = source_config.get("url")
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ChinaTechBot/1.0',
+        'Content-Type': 'application/json',
+    }
+
+    try:
+        if source_type == "sina_roll":
+            resp = requests.get(url, headers=headers, timeout=8)
+            if resp.status_code != 200:
+                print(f"⚠️ JSON 源抓取失败 [{source_name}] 状态码 {resp.status_code}")
+                return []
+            data = resp.json()
+            entries = data.get("result", {}).get("data", [])
+            fetched = []
+            count = 0
+            for e in entries:
+                if count >= max_items:
+                    break
+                title = (e.get("title") or "").strip()
+                link = (e.get("url") or "").strip()
+                summary = clean_html_summary(e.get("intro") or "")
+                if not title or not link:
+                    continue
+                if not is_recent_ts(e.get("ctime"), max_hours=168):
+                    continue
+                fetched.append(
+                    f"【模块: {category} | 平台源: {source_name}】\n"
+                    f"标题: {title}\n"
+                    f"链接: {link}\n"
+                    f"摘要: {summary}\n"
+                )
+                count += 1
+            return fetched
+
+        elif source_type == "36kr_hot":
+            resp = requests.post(
+                url,
+                headers=headers,
+                json={"partner_id": "web", "timestamp": 0, "param": {"siteId": 1, "platformId": 2}},
+                timeout=8,
+            )
+            if resp.status_code != 200:
+                print(f"⚠️ JSON 源抓取失败 [{source_name}] 状态码 {resp.status_code}")
+                return []
+            data = resp.json()
+            entries = data.get("data", {}).get("hotRankList", [])
+            fetched = []
+            count = 0
+            for e in entries:
+                if count >= max_items:
+                    break
+                tm = e.get("templateMaterial", {}) or {}
+                item_id = e.get("itemId")
+                title = (tm.get("widgetTitle") or "").strip()
+                if not title or not item_id:
+                    continue
+                if not is_recent_ts(tm.get("publishTime"), max_hours=168):
+                    continue
+                link = f"https://36kr.com/p/{item_id}"
+                read_count = tm.get("statRead")
+                summary = f"36氪热榜，阅读量约 {read_count}" if read_count else ""
+                fetched.append(
+                    f"【模块: {category} | 平台源: {source_name}】\n"
+                    f"标题: {title}\n"
+                    f"链接: {link}\n"
+                    f"摘要: {summary}\n"
+                )
+                count += 1
+            return fetched
+
+        else:
+            print(f"⚠️ 未知 JSON 源类型 [{source_name}] {source_type}")
+            return []
+
+    except Exception as e:
+        print(f"⚠️ JSON 源抓取异常 [{source_name}] {type(e).__name__}: {e}")
+        return []
+
+
 def clean_html_summary(html_text):
     """清洗 HTML 标签，提炼纯文本"""
     if not html_text:
@@ -121,7 +238,7 @@ def fetch_all_feeds():
     """并发并行抓取全量 RSS 订阅点"""
     print("1. 正在通过并发线程池拉取国内科技媒体数据源（含超时控制与 7 天过滤）...")
     raw_articles = []
-    
+
     with ThreadPoolExecutor(max_workers=25) as executor:
         future_to_source = {}
         for category, feeds in MODULE_FEEDS.items():
@@ -129,6 +246,12 @@ def fetch_all_feeds():
             for source_name, feed_url in feeds.items():
                 future = executor.submit(fetch_single_feed, source_name, feed_url, category, max_items=max_items)
                 future_to_source[future] = source_name
+
+        for category, json_sources in JSON_FEEDS.items():
+            max_items = CATEGORY_MAX_ITEMS.get(category, 6)
+            for cfg in json_sources:
+                future = executor.submit(fetch_json_source, cfg, category, max_items=max_items)
+                future_to_source[future] = cfg.get("name", "JSON源")
 
         for future in as_completed(future_to_source):
             items = future.result()
