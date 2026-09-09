@@ -1,17 +1,19 @@
 import os
 import sys
 import re
+import time
 import asyncio
 import smtplib
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from openai import OpenAI
+import requests
+import feedparser
 import markdown
 from premailer import transform
-import feedparser
 import edge_tts
+from openai import OpenAI
 
 # ---------------------------------------------------------------------------
 # 读取环境变量
@@ -29,20 +31,20 @@ EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")
 
 # ---------------------------------------------------------------------------
-# 1. 各模块 Top 50 顶级数据源全量配置 (混合网站、YouTube、知乎/公众号桥接、ArXiv)
+# 1. 各模块 Top 顶级数据源全量配置 (新增 Chips and Cheese, LLVM Weekly, Releases 等)
 # ---------------------------------------------------------------------------
 MODULE_FEEDS = {
-    # === 模块一：LLM 系统与推理/训练加速 (Top 50) ===
+    # === 模块一：LLM 系统与推理/训练加速 ===
     "LLM_Infra": {
         "ArXiv Machine Learning (cs.LG)": "http://export.arxiv.org/rss/cs.LG",
         "ArXiv Computation and Language (cs.CL)": "http://export.arxiv.org/rss/cs.CL",
         "ArXiv Artificial Intelligence (cs.AI)": "http://export.arxiv.org/rss/cs.AI",
-        "TechCrunch AI": "https://techcrunch.com/category/artificial-intelligence/feed/",
-        "Understanding AI": "https://www.understandingai.org/feed",
         "PyTorch Official Blog": "https://pytorch.org/feed.xml",
         "Hugging Face Blog": "https://huggingface.co/blog/feed.xml",
         "Anyscale / Ray Blog": "https://www.anyscale.com/blog/rss.xml",
-        "VLLM Official Blog": "https://blog.vllm.ai/feed.xml",
+        "vLLM Official Blog": "https://blog.vllm.ai/feed.xml",
+        "vLLM GitHub Releases": "https://github.com/vllm-project/vllm/releases.atom",
+        "TensorRT-LLM GitHub Releases": "https://github.com/NVIDIA/TensorRT-LLM/releases.atom",
         "DeepSpeed Official Blog": "https://www.deepspeed.ai/feed.xml",
         "Triton Compiler Blog": "https://triton-lang.org/main/feed.xml",
         "MLSys Conference News": "https://mlsys.org/rss.xml",
@@ -50,147 +52,51 @@ MODULE_FEEDS = {
         "Google AI Blog": "https://research.google/blog/rss/",
         "Meta AI Blog": "https://ai.meta.com/blog/rss/",
         "NVIDIA Developer AI Blog": "https://developer.nvidia.com/blog/category/ai-deep-learning/feed/",
-        "Microsoft Research AI": "https://www.microsoft.com/en-us/research/feed/",
-        "MIT CSAIL AI": "https://www.csail.mit.edu/news/rss",
-        "Stanford HAI": "https://hai.stanford.edu/news/rss.xml",
-        "Berkeley AI Research (BAIR)": "https://bair.berkeley.edu/blog/feed.xml",
         "LlamaIndex Blog": "https://www.llamaindex.ai/blog/rss.xml",
         "LangChain Blog": "https://blog.langchain.dev/rss/",
-        "YouTube - Two Minute Papers": "https://www.youtube.com/feeds/videos.xml?channel_id=UCbfYPyITQ-7l4upoX8nvctg",
-        "YouTube - Yannic Kilcher": "https://www.youtube.com/feeds/videos.xml?channel_id=UCZHmXP3dRqiUqQy8WfWWPGA",
-        "YouTube - Andrej Karpathy": "https://www.youtube.com/feeds/videos.xml?channel_id=UC37tpQG223v0pS2w1vU8A2A",
-        "知乎热榜 - 人工智能": "https://rsshub.app/zhihu/hotlist",
-        "V2EX AI 板块": "https://www.v2ex.com/feed/tab/ai.xml",
-        "Weights & Biases Blog": "https://wandb.ai/site/blog/feed.xml",
-        "MosaicML / Databricks AI": "https://www.databricks.com/blog/category/deep-learning/feed",
+        "Unsloth AI Blog": "https://unsloth.ai/blog/rss.xml",
         "Together AI Blog": "https://www.together.ai/blog/rss.xml",
         "Groq Hardware & Infra": "https://groq.com/feed/",
-        "Cerebras Blog": "https://cerebras.ai/feed/",
-        "SambaNova Systems": "https://sambanova.ai/feed/",
         "Modal Labs Blog": "https://modal.com/blog/feed.xml",
-        "RunPod Blog": "https://blog.runpod.io/rss/",
-        "Lamini AI Blog": "https://www.lamini.ai/blog/rss.xml",
-        "Unsloth AI Blog": "https://unsloth.ai/blog/rss.xml",
-        "Predibase AI": "https://predibase.com/blog/rss.xml",
-        "Baseten AI Blog": "https://www.baseten.co/blog/rss.xml",
-        "Replicate Blog": "https://replicate.com/blog/rss.xml",
-        "Fireworks AI Blog": "https://fireworks.ai/blog/rss.xml",
-        "Pinecone Blog": "https://www.pinecone.io/blog/rss.xml",
-        "Qdrant Blog": "https://qdrant.tech/blog/index.xml",
-        "Chroma DB Blog": "https://www.trychroma.com/blog/rss.xml",
-        "Weaviate Vector DB": "https://weaviate.io/blog/rss.xml",
-        "AI News Digest": "https://ainews.com/rss.xml",
-        "Paper with Code Trending": "https://paperswithcode.com/rss/latest",
-        "MarkTechPost AI": "https://www.marktechpost.com/feed/",
-        "Synced AI Technology": "https://syncedreview.com/feed/",
-        "InfoQ AI & Data": "https://feed.infoq.com/ai-ml-data-eng/"
+        "Paper with Code Trending": "https://paperswithcode.com/rss/latest"
     },
 
-    # === 模块二：体系结构与芯片动态 (Top 50) ===
+    # === 模块二：体系结构与 CPU/GPU 芯片动态 ===
     "Silicon_Architecture": {
+        "Chips and Cheese": "https://chipsandcheese.com/feed/",
         "ArXiv Computer Architecture (cs.AR)": "http://export.arxiv.org/rss/cs.AR",
         "SemiEngineering": "https://semiengineering.com/feed/",
-        "AnandTech / Hardware Deep Dives": "https://www.anandtech.com/rss",
-        "Tom's Hardware": "https://www.tomshardware.com/feeds/all",
-        "Hardware Times": "https://www.hardwaretimes.com/feed/",
-        "EE Times China (电子工程专辑)": "https://www.eet-china.com/rss/news.xml",
-        "Design & Reuse (IP & SoC)": "https://www.design-reuse.com/articles/rss/",
         "WikiChip Fuse": "https://fuse.wikichip.org/feed/",
-        "ARM Technical Articles": "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/rss",
-        "RISC-V International News": "https://riscv.org/news/feed/",
         "ServeTheHome (STH)": "https://www.servethehome.com/feed/",
         "The Next Platform": "https://www.nextplatform.com/feed/",
         "EE Times Global": "https://www.eetimes.com/feed/",
-        "Semiconductor Digest": "https://www.semiconductor-digest.com/feed/",
         "IEEE Spectrum Chips": "https://spectrum.ieee.org/feeds/topic/semiconductors.rss",
-        "Microprocessor Report": "https://www.techinsights.com/blog/rss.xml",
-        "AnandTech Processors": "https://www.anandtech.com/tag/cpus/rss",
-        "Chips and Cheese": "https://chipsandcheese.com/feed/",
         "Phoronix Processors": "https://www.phoronix.com/rss.php",
-        "ASCII.jp Hardware": "https://ascii.jp/serialarticles/420986/rss.xml",
-        "YouTube - Asianometry": "https://www.youtube.com/feeds/videos.xml?channel_id=UC19beC0uPyeAC062A0p4JpA",
-        "YouTube - Gamers Nexus": "https://www.youtube.com/feeds/videos.xml?channel_id=UCl2mFZoRqjw_ELAX4Yisf6w",
-        "YouTube - TechTechPotato (Dr. Ian Cutress)": "https://www.youtube.com/feeds/videos.xml?channel_id=UC1ZfSfZ0A_L4b40uJ5-G9_w",
-        "YouTube - Moore's Law Is Dead": "https://www.youtube.com/feeds/videos.xml?channel_id=UCRBw_kG2EUpG1C_S8J9B4uA",
-        "YouTube - Buildzoid (Actually Hardcore Overclocking)": "https://www.youtube.com/feeds/videos.xml?channel_id=UC1mO2AUpk23C-QidmO9N_WA",
-        "知乎 - 计算机体系结构讨论": "https://rsshub.app/zhihu/hotlist",
-        "Semiconductor Engineering Memory": "https://semiengineering.com/category/memory/feed/",
-        "Semiconductor Engineering EDA": "https://semiengineering.com/category/eda/feed/",
-        "Semiconductor Engineering Packaging": "https://semiengineering.com/category/packaging/feed/",
-        "ISCA Architecture Conference": "https://www.iscaconf.org/rss.xml",
-        "MICRO Architecture Conference": "https://www.microarch.org/rss.xml",
-        "HPCA Architecture News": "https://hpca-conf.org/rss.xml",
-        "ASPLOS Architecture News": "https://www.asplos-conf.org/rss.xml",
+        "ARM Technical Articles": "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/rss",
+        "RISC-V International News": "https://riscv.org/news/feed/",
         "SiFive RISC-V Blog": "https://www.sifive.com/blog/rss.xml",
-        "Ventana Micro Systems": "https://www.ventanamicro.com/feed/",
         "Tenstorrent Blog": "https://tenstorrent.com/feed/",
-        "Esperanto Technologies": "https://www.esperanto.ai/feed/",
-        "Ampere Computing Blog": "https://amperecomputing.com/blog/rss.xml",
-        "Graphcore Hardware Blog": "https://www.graphcore.ai/posts/rss.xml",
-        "Untether AI Blog": "https://www.untether.ai/feed/",
-        "Mythic AI Hardware": "https://mythic-ai.com/feed/",
-        "Syntiant Edge AI": "https://www.syntiant.com/blog-feed.xml",
-        "Cadence Design Systems Blog": "https://community.cadence.com/cadence_blogs_8/b/blogs/rss",
-        "Synopsys Semiconductor Blog": "https://blogs.synopsys.com/feed/",
-        "Siemens EDA Blog": "https://blogs.sw.siemens.com/eda/feed/",
-        "Doulos SystemVerilog & VHDL": "https://www.doulos.com/rss.xml",
-        "ConsortiumInfo Standards": "https://www.consortiuminfo.org/feed/",
-        "Huodongxing Tech Events": "https://www.huodongxing.com/rss",
-        "KKNews Silicon": "https://kknews.cc/rss.xml",
-        "Yahoo Finance Tech & Semiconductor": "https://hk.finance.yahoo.com/rss"
+        "YouTube - Asianometry": "https://www.youtube.com/feeds/videos.xml?channel_id=UC19beC0uPyeAC062A0p4JpA",
+        "YouTube - TechTechPotato": "https://www.youtube.com/feeds/videos.xml?channel_id=UC1ZfSfZ0A_L4b40uJ5-G9_w"
     },
 
-    # === 模块三：系统性能调优与 Kernel (Top 50) ===
-    "Kernel_Performance": {
-        "ArXiv Distributed Computing (cs.DC)": "http://export.arxiv.org/rss/cs.DC",
-        "ArXiv Performance Evaluation (cs.PF)": "http://export.arxiv.org/rss/cs.PF",
-        "Phoronix (Linux & Kernel)": "https://www.phoronix.com/rss.php",
-        "LWN.net (Linux Kernel Direct)": "https://lwn.net/headlines/rss",
-        "Slashdot (Developers/Systems)": "https://rss.slashdot.org/Slashdot/slashdotMain",
-        "It's FOSS News": "https://news.itsfoss.com/rss/",
-        "Ars Technica Tech": "https://feeds.arstechnica.com/arstechnica/index",
-        "Packet Storm Security": "https://rss.packetstormsecurity.com/",
-        "Alltop Linux": "https://alltop.com/linux",
-        "Narkive Mailing Lists": "https://narkive.com/rss",
-        "DZone Performance": "https://feeds.dzone.com/performance",
-        "Kernel.org Releases & News": "https://www.kernel.org/feeds/kdist.xml",
-        "Brendan Gregg Performance Blog": "https://www.brendangregg.com/blog/rss.xml",
-        "Linux Magazine": "https://www.linux-magazine.com/rss/feed/lmg_full",
-        "Phoronix Kernel Benchmarks": "https://www.phoronix.com/rss.php?mode=kernel",
-        "Red Hat Research & Systems": "https://research.redhat.com/feed/",
-        "Ubuntu Kernel Blog": "https://ubuntu.com/blog/tag/kernel/feed",
-        "SUSE Blog Kernel & Performance": "https://www.suse.com/c/feed/",
-        "Cloudflare Tech Blog": "https://blog.cloudflare.com/rss/",
-        "Netflix Tech Blog (Systems)": "https://netflixtechblog.com/feed",
-        "Uber Engineering Systems": "https://www.uber.com/blog/engineering/rss/",
-        "Meta Engineering Systems": "https://engineering.fb.com/feed/",
-        "Google Cloud Systems Blog": "https://cloud.google.com/blog/rss/",
-        "AWS Architecture Blog": "https://aws.amazon.com/blogs/architecture/feed/",
-        "Microsoft Azure Systems": "https://azure.microsoft.com/en-us/blog/feed/",
-        "Intel System Performance": "https://community.intel.com/rss/board?board.id=tech-blogs",
-        "AMD Instinct & ROCm Blog": "https://rocm.docs.amd.com/en/latest/rss.xml",
-        "NVIDIA CUDA & Systems Blog": "https://developer.nvidia.com/blog/category/cuda/feed/",
-        "eBPF Official Blog": "https://ebpf.io/feed.xml",
-        "Cilium & eBPF Networking": "https://cilium.io/blog/rss.xml",
-        "DPDK Fast Packet Processing": "https://www.dpdk.org/feed/",
-        "SPDK Storage Performance": "https://spdk.io/feed.xml",
-        "IO_uring Linux I/O": "https://kernel.dk/rss.xml",
+    # === 模块三：HPC、编译优化与 Linux Kernel ===
+    "Kernel_Performance_HPC": {
+        "LLVM Weekly": "llvmweekly.org/rss.xml",
         "LLVM Compiler Blog": "https://blog.llvm.org/feed.xml",
         "GCC Compiler News": "https://gcc.gnu.org/rss.xml",
+        "LWN.net (Linux Kernel Direct)": "https://lwn.net/headlines/rss",
+        "Brendan Gregg Performance Blog": "https://www.brendangregg.com/blog/rss.xml",
+        "Phoronix (Linux & Kernel)": "https://www.phoronix.com/rss.php",
+        "Kernel.org Releases": "https://www.kernel.org/feeds/kdist.xml",
+        "eBPF Official Blog": "https://ebpf.io/feed.xml",
         "Rust Compiler & Performance": "https://blog.rust-lang.org/feed.xml",
-        "Golang Performance Blog": "https://go.dev/blog/feed.atom",
-        "Java Performance (OpenJDK)": "https://openjdk.org/feed.xml",
-        "Valgrind Performance Tools": "https://valgrind.org/rss.xml",
-        "Perf Wiki Linux": "https://perf.wiki.kernel.org/index.php?title=Special:RecentChanges&feed=atom",
-        "Systemd Project Releases": "https://github.com/systemd/systemd/releases.atom",
-        "Bcachefs Linux Kernel": "https://bcachefs.org/feed.xml",
-        "ZFS on Linux": "https://openzfs.github.io/openzfs-docs/feed.xml",
-        "XFS Filesystem Kernel": "https://xfs.wiki.kernel.org/index.php?title=Special:RecentChanges&feed=atom",
-        "Btrfs Filesystem Kernel": "https://btrfs.wiki.kernel.org/index.php?title=Special:RecentChanges&feed=atom",
-        "Linux Security Module (LSM)": "https://kernelsecurity.com/feed/",
-        "CNCF Systems & Performance": "https://www.cncf.io/blog/feed/",
-        "KubeFlow Systems Blog": "https://www.kubeflow.org/blog/index.xml",
-        "Ray Project Systems": "https://www.ray.io/blog/rss.xml",
+        "ArXiv Distributed Computing (cs.DC)": "http://export.arxiv.org/rss/cs.DC",
+        "ArXiv Performance Evaluation (cs.PF)": "http://export.arxiv.org/rss/cs.PF",
+        "Cloudflare Tech Blog": "https://blog.cloudflare.com/rss/",
+        "Netflix Tech Blog": "https://netflixtechblog.com/feed",
+        "NVIDIA CUDA & Systems Blog": "https://developer.nvidia.com/blog/category/cuda/feed/",
+        "AMD Instinct & ROCm Docs": "https://rocm.docs.amd.com/en/latest/rss.xml",
         "Hacker News Systems Tech": "https://news.ycombinator.com/rss"
     }
 }
@@ -203,15 +109,43 @@ def clean_html_summary(html_text):
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
     return clean_text[:400]
 
-def fetch_single_feed(source_name, feed_url, category, max_items=1):
-    """单源抓取函数（供多线程并发调用）"""
+def is_recent_entry(entry, max_hours=48):
+    """检查文章是否在最近 max_hours 小时内发布"""
+    published_struct = entry.get("published_parsed") or entry.get("updated_parsed")
+    if not published_struct:
+        return True  # 若源未提供明确时间，默认保留供 DeepSeek 校验
     try:
-        feed = feedparser.parse(feed_url, response_headers={'User-Agent': 'Mozilla/5.0'})
+        pub_time = datetime.fromtimestamp(time.mktime(published_struct), tz=timezone.utc)
+        now_time = datetime.now(timezone.utc)
+        return (now_time - pub_time) <= timedelta(hours=max_hours)
+    except Exception:
+        return True
+
+def fetch_single_feed(source_name, feed_url, category, max_items=2):
+    """单源抓取函数（增加超时与 48 小时时间过滤）"""
+    if not feed_url.startswith("http"):
+        feed_url = "https://" + feed_url
+
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) PerfPulseBot/1.0'}
+    
+    try:
+        # 使用 requests 加载并设置 8 秒硬超时，防止网络阻塞
+        resp = requests.get(feed_url, headers=headers, timeout=8)
+        if resp.status_code != 200:
+            return []
+        
+        feed = feedparser.parse(resp.content)
         fetched_items = []
         count = 0
+
         for entry in feed.entries:
             if count >= max_items:
                 break
+            
+            # 时间过滤：跳过 48 小时之前的旧资讯
+            if not is_recent_entry(entry, max_hours=48):
+                continue
+
             title = entry.get("title", "").strip()
             link = entry.get("link", "").strip()
             summary = clean_html_summary(entry.get("summary", entry.get("description", "")))
@@ -226,19 +160,19 @@ def fetch_single_feed(source_name, feed_url, category, max_items=1):
                 count += 1
         return fetched_items
     except Exception:
+        # 静默捕获抓取超时或网络错误，保障整体流水线顺畅
         return []
 
-def fetch_all_50_feeds():
-    """并发并行抓取 150 个顶级 RSS 订阅点"""
-    print("1. 正在通过多线程并发并行拉取 3 大模块 Top 150 全球数据源...")
+def fetch_all_feeds():
+    """并发并行抓取全量 RSS 订阅点"""
+    print("1. 正在通过并发线程池拉取全球技术数据源（含超时控制与 48h 过滤）...")
     raw_articles = []
     
-    # 建立多线程池，并发 30 个线程，极速完成 150 个源的抓取
-    with ThreadPoolExecutor(max_workers=30) as executor:
+    with ThreadPoolExecutor(max_workers=25) as executor:
         future_to_source = {}
         for category, feeds in MODULE_FEEDS.items():
             for source_name, feed_url in feeds.items():
-                future = executor.submit(fetch_single_feed, source_name, feed_url, category, max_items=1)
+                future = executor.submit(fetch_single_feed, source_name, feed_url, category, max_items=2)
                 future_to_source[future] = source_name
 
         for future in as_completed(future_to_source):
@@ -247,10 +181,10 @@ def fetch_all_50_feeds():
                 raw_articles.extend(items)
 
     if not raw_articles:
-        print("❌ 未抓取到任何真实新闻，终止程序。")
-        sys.exit(1)
+        print("⚠️ 未抓取到 48 小时内的新资讯，将使用保底逻辑。")
+        return "今日暂无 48 小时内的新动态更新。"
 
-    print(f"✅ 成功从全球 Top 150 权威源中并发抓取并提炼出 {len(raw_articles)} 条最新资讯！")
+    print(f"✅ 成功从权威源中抓取并筛选出 {len(raw_articles)} 条最新资讯！")
     return "\n---\n".join(raw_articles)
 
 
@@ -258,9 +192,9 @@ def fetch_all_50_feeds():
 # 2. DeepSeek 生成文字简报与音频朗读脚本
 # ---------------------------------------------------------------------------
 def generate_briefing_and_audio_script():
-    real_news_context = fetch_all_50_feeds()
+    real_news_context = fetch_all_feeds()
 
-    print("2. 正在通过 DeepSeek 严格基于真实多源上下文生成简报与播客脚本...")
+    print("2. 正在通过 DeepSeek 提炼专业技术简报与播客脚本...")
     if not DEEPSEEK_API_KEY:
         print("❌ 错误：未配置 DEEPSEEK_API_KEY！")
         sys.exit(1)
@@ -270,32 +204,30 @@ def generate_briefing_and_audio_script():
         base_url="https://api.deepseek.com"
     )
 
-    now = datetime.now()
-    exact_iso_time = now.strftime("%Y-%m-%d %H:%M:%S")
+    exact_iso_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     briefing_prompt = f"""
 你是一位极度严谨的系统与硬件架构师兼科技编辑。
 当前时间：{exact_iso_time}。
 
 ### 核心任务：
-基于下方【真实抓取数据上下文】（覆盖 150 个全球 Top 级别的 LLM Infra、体系结构半导体、Linux Kernel 与最新 ArXiv 预印本），整理一份【PerfPulse 每日技术简报】。
+基于下方【真实抓取数据上下文】，整理一份【PerfPulse 每日架构与系统性能简报】。
 
 ================【真实抓取数据上下文】================
 {real_news_context}
 ======================================================
 
-### 核心防幻觉与事实审判法则（CRITICAL RULES）：
+### 重点关注的技术主题（优先提炼以下方向）：
+1. **LLM 系统加速**：KV Cache 管理、Speculative Decoding、PagedAttention、Quantization (FP8/INT4/AWQ)、FlashAttention/FlashDecoding、vLLM/TensorRT-LLM 优化、Distributed Training/Inference (Pipeline/Tensor Parallelism)。
+2. **CPU/GPU 微架构**：Cache Hierarchy (L1/L2/L3/SLC)、Branch Predictor、Out-of-Order Execution、ROB/Execution Units、Vector/Matrix Extensions (AVX-512, AMX, SVE, Tensor Cores)、Interconnect (NVLink, CXL, PCIe Gen6)。
+3. **HPC 与编译优化**：LLVM/MLIR Passes、Loop Transformations (Tiling, Unrolling, Fusion)、Triton/TVM/XLA 代码生成、CUDA/ROCm/SYCL 内核优化、MPI/NCCL 通信重叠。
+4. **Linux Kernel & Performance**：eBPF/XDP、io_uring、Memory Management (THP, NUMA balancing, ZSWAP)、Scheduler (EEVDF)、Filesystem/Block Layer (bcachefs, NVMe-oF)、perf/BPF 性能分析。
+
+### 核心防幻觉与事实审判法则：
 1. **客观语气与进展限定**：严禁将“实验”、“讨论”、“初步探究”撰写为“成功落地”或“重大突破”。
-2. **识别第三方/民间项目与官方发布**：对于民间第三方开源项目或非官方评测，必须明确标注“第三方社区/个人观点，非厂商官方发布”。
-3. **多媒体与论文数据还原**：如果数据来自 ArXiv 论文、YouTube 视频或社区讨论，请客观提炼其核心研究论点或争议点，并附带原链接。
-4. **严格数据源对齐**：绝不凭空臆造未出现的性能数据、代码片段或链接。
-
----
-
-### 格式与排版规范：
-- 全局严禁使用任何项目符号（`-`、`*`）或数字列表序号（`1.`、`2.`）。
-- 代码片段必须包裹在标准 Markdown 围栏代码块中（```bash 或 ```cpp）。
-- **静默跳过法则**：若某个领域在今日抓取数据中完全没有对应资讯，请直接静默忽略该板块标题，绝对不要输出“无直接相关数据”或“无相关内容”等废话。
+2. **区分民间与官方**：对于民间第三方开源项目或非官方评测，必须明确标注“第三方社区/个人观点”。
+3. **静默跳过法则**：若某个领域在今日抓取数据中完全没有对应资讯，直接静默忽略该板块标题，严禁输出“无相关内容”。
+4. **格式规范**：全局严禁使用任何项目符号（`-`、`*`）或数字列表序号（`1.`、`2.`）。代码片段必须包裹在标准 Markdown 代码块中。
 
 ---
 
@@ -304,33 +236,33 @@ def generate_briefing_and_audio_script():
 ## 30 秒极速看点 (TL;DR)
 
 ### 突破/论文/开源发布
-用客观严谨的一句话总结真实发生的最新发布/论文。
+用客观严谨的一句话总结最新发布或论文。
 
 ### 芯片与 LLM 引擎收益
 用客观严谨的一句话总结真实芯片或 AI 系统动态。
 
 ### Kernel 与编译调优干货
-用客观严谨的一句话总结真实 Linux Kernel 或系统调优动态。
+用客观严谨的一句话总结 Linux Kernel 或编译调优动态。
 
 ---
 
 ## 今日深度剖析 (Today's Deep Dive)
-挑选上述数据中最具架构深度或讨论度最高的一条新闻/论文/视频，进行客观专业的深度分析（200-300 字）。分清“实验/评测观点”与“生产级落地”的界限。
+挑选上述数据中最具架构深度的一条新闻/论文/更新，进行客观专业的深度分析（200-300 字）。
 
 ---
 
 ## LLM 系统与推理/训练加速 (LLM Infra & Acceleration)
-根据真实上下文整理（若无相关数据则直接静默跳过此标题）。
+根据真实上下文整理（若无相关数据则静默跳过）。
 
 ---
 
 ## 体系结构与芯片动态 (Silicon & Microarchitecture)
-根据真实上下文整理（包含半导体、晶圆与架构新闻，若有第三方项目需明确标注）。
+根据真实上下文整理（若无相关数据则静默跳过）。
 
 ---
 
-## 系统性能调优与 Kernel (Kernel & Performance)
-根据真实上下文整理 Linux Kernel、OS 与编译调优动态。
+## HPC、编译优化与 Linux Kernel (HPC, Compilers & Kernel)
+根据真实上下文整理 LLVM、CUDA、Linux Kernel 与 HPC 动态（若无相关数据则静默跳过）。
 
 ---
 
@@ -342,7 +274,7 @@ def generate_briefing_and_audio_script():
         briefing_response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "你是一个严谨、苛刻的技术新闻核查编辑。你的任务是基于提供的 150 个多源上下文提炼信息，绝不夸大事实，没有数据的板块直接跳过。"},
+                {"role": "system", "content": "你是一个严谨、苛刻的技术核查编辑。只提炼真实上下文，绝不夸大事实，没有数据的板块直接跳过。"},
                 {"role": "user", "content": briefing_prompt}
             ],
             temperature=0.0,
@@ -361,11 +293,10 @@ def generate_briefing_and_audio_script():
 请将以下技术简报转换为一段适合 2-3 分钟口语化播客朗读的文本脚本。
 
 要求：
-1. 语言通俗自然、适合听觉吸收，去除所有 Markdown 格式符号（如 `#`、`*`、`[链接]` 等）。
+1. 语言通俗自然，去除所有 Markdown 格式符号（如 `#`、`*`、`[链接]` 等）。
 2. 开头问好：“大家好，欢迎收听 PerfPulse 每日架构听力解读。”
 3. 重点阐述 30 秒极速看点和今日深度剖析的内容。
-4. 保持客观严谨，严禁夸大或编造内容。
-5. 控制在 400-600 字之间。
+4. 控制在 400-600 字之间。
 
 === 简报内容 ===
 {md_content}
@@ -373,7 +304,7 @@ def generate_briefing_and_audio_script():
         audio_response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "你是一位专业的科技播客主持人，擅长将硬核技术与多媒体资讯转换为自然流畅的口语表达。"},
+                {"role": "system", "content": "你是一位专业的科技播客主持人，擅长将硬核技术转换为自然流畅的口语表达。"},
                 {"role": "user", "content": audio_script_prompt}
             ],
             temperature=0.2,
@@ -392,7 +323,7 @@ def generate_briefing_and_audio_script():
 # 3. Edge-TTS 异步音频合成
 # ---------------------------------------------------------------------------
 async def generate_audio_async(text, output_mp3_path="perf_pulse_podcast.mp3"):
-    print(f"3. 正在合成 3 分钟播客 MP3 音频文件 ({output_mp3_path})...")
+    print(f"3. 正在合成播客 MP3 音频文件 ({output_mp3_path})...")
     voice = "zh-CN-YunxiNeural"
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_mp3_path)
@@ -406,7 +337,7 @@ def create_podcast_audio(script_text, output_file="perf_pulse_podcast.mp3"):
 # 4. 邮件渲染与发送
 # ---------------------------------------------------------------------------
 def send_email(subject, md_content, audio_script, mp3_path="perf_pulse_podcast.mp3"):
-    print("4. 正在渲染适配公众号与邮件样式的 HTML 邮件...")
+    print("4. 正在渲染适配邮件样式的 HTML 正文...")
 
     sender = EMAIL_SENDER.strip() if EMAIL_SENDER else ""
     receiver = EMAIL_RECEIVER.strip() if EMAIL_RECEIVER else sender
@@ -431,7 +362,7 @@ def send_email(subject, md_content, audio_script, mp3_path="perf_pulse_podcast.m
         {audio_script[:120]}...
       </div>
       <div style="font-size: 12px; color: #6366f1; font-weight: 500;">
-        💡 提示：今日音频文件（{mp3_path}）已自动合成并作为邮件附件随信附带，也可在 Github Releases / 播客端播放。
+        💡 提示：今日音频文件（{mp3_path}）已自动合成并作为邮件附件随信附带。
       </div>
     </div>
     """
@@ -497,22 +428,22 @@ def send_email(subject, md_content, audio_script, mp3_path="perf_pulse_podcast.m
 <body>
   <div class="container">
     <div class="header">
-      <h1>⚡ PerfPulse 每日技术与架构简报</h1>
-      <div class="subtitle">发布日期：{today_date} | 真实硬件、体系结构与 Linux Kernel 严谨跟踪</div>
+      <h1>⚡ PerfPulse 每日微架构、系统与 HPC 简报</h1>
+      <div class="subtitle">发布日期：{today_date} | 真实硬件、LLM 加速与 Linux Kernel 严谨跟踪</div>
     </div>
     <div class="content">
       {audio_header_html}
       {raw_html}
     </div>
     <div class="footer">
-      基于 Top 150 全球数据源 & DeepSeek 零幻觉模式构建
+      基于顶级数据源 & DeepSeek 零幻觉模式构建
     </div>
   </div>
 </body>
 </html>
 """
 
-    print("5. 正在进行 CSS 内联化转换...")
+    print("5. 正在进行 CSS 内联化转换并发送邮件...")
     inlined_html = transform(styled_html)
 
     message = MIMEMultipart()
@@ -557,4 +488,4 @@ if __name__ == "__main__":
     md_content, audio_script = generate_briefing_and_audio_script()
     mp3_file = "perf_pulse_podcast.mp3"
     create_podcast_audio(audio_script, mp3_file)
-    send_email("【PerfPulse】每日硬件、系统与 LLM 性能简报", md_content, audio_script, mp3_file)
+    send_email("【PerfPulse】每日硬件、微架构与 LLM 性能简报", md_content, audio_script, mp3_file)
