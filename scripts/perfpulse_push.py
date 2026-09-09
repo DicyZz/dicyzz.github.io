@@ -100,7 +100,7 @@ def clean_html_summary(html_text):
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
     return clean_text[:400]
 
-def is_recent_entry(entry, max_hours=48):
+def is_recent_entry(entry, max_hours=72):
     """检查文章是否在最近 max_hours 小时内发布"""
     published_struct = entry.get("published_parsed") or entry.get("updated_parsed")
     if not published_struct:
@@ -112,7 +112,7 @@ def is_recent_entry(entry, max_hours=48):
     except Exception:
         return True
 
-def fetch_single_feed(source_name, feed_url, category, max_items=2):
+def fetch_single_feed(source_name, feed_url, category, max_items=4):
     """单源抓取函数（增加超时与 48 小时时间过滤）"""
     if not feed_url.startswith("http"):
         feed_url = "https://" + feed_url
@@ -133,7 +133,7 @@ def fetch_single_feed(source_name, feed_url, category, max_items=2):
             if count >= max_items:
                 break
             
-            if not is_recent_entry(entry, max_hours=48):
+            if not is_recent_entry(entry, max_hours=72):
                 continue
 
             title = entry.get("title", "").strip()
@@ -162,7 +162,7 @@ def fetch_all_feeds():
         future_to_source = {}
         for category, feeds in MODULE_FEEDS.items():
             for source_name, feed_url in feeds.items():
-                future = executor.submit(fetch_single_feed, source_name, feed_url, category, max_items=2)
+                future = executor.submit(fetch_single_feed, source_name, feed_url, category, max_items=4)
                 future_to_source[future] = source_name
 
         for future in as_completed(future_to_source):
