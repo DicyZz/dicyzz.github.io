@@ -33,10 +33,3 @@ jobs:
           EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
         run: |
           python scripts/perfpulse_push.py
-
-      - name: Upload Audio Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: perf-pulse-podcast-mp3
-          path: perf_pulse_podcast.mp3
-          retention-days: 7

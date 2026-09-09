@@ -17,6 +17,7 @@ from openai import OpenAI
 # 读取环境变量
 # ---------------------------------------------------------------------------
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
 
 try:
@@ -240,48 +241,31 @@ def generate_briefing():
 
 ---
 
-### 输出结构（输出纯 Markdown 内容，切勿包裹全局 ```markdown）：
+### 输出结构（参考 Easyperf Newsletter 的 digest 风格，输出纯 Markdown 内容，切勿包裹全局 ```markdown）：
 
-## 30 秒极速看点 (TL;DR)
+开头先写一行本期导语（不加标题、不加项目符号，直接一行自然句）：
+"本期看点：……，以及更多。" 用 3-4 个短语点出本期最值得关注的点。
 
-### 突破/论文/开源发布
-用客观严谨的一句话总结最新发布或论文。
+随后按「内容类型」分区，只保留真实上下文中确实有内容的板块，缺内容的板块整块标题静默删除：
 
-### 芯片与 LLM 引擎收益
-用客观严谨的一句话总结真实芯片或 AI 系统动态。
+## 新闻与发布 (News)
+## 深度文章 (Blog Posts)
+## 论文 (Research Papers)
+## 其他资料 (Other Materials)
 
-### Kernel 与编译调优干货
-用客观严谨的一句话总结 Linux Kernel 或编译调优动态。
+每条统一格式（正文段落，禁止用项目符号或编号列表）：
+**加粗标题**：用 2-4 句话依次说明「这是什么 → 核心优化机制/技术点 → 量化性能收益（尽量写具体数字，如 x 倍、百分比、带宽/延迟数值）→ 局限或适用条件（如有）」，末尾以 `[链接](原始链接)` 收尾；如为视频/工具类可在链接文字中注明（Youtube / GitHub / 视频）。
 
----
-
-## 今日深度剖析 (Today's Deep Dive)
-挑选上述数据中最具架构深度的一条新闻/论文/更新，进行客观专业的深度分析（200-300 字）。
-
----
-
-## LLM 系统与推理/训练加速 (LLM Infra & Acceleration)
-根据真实上下文整理，每条必须附原始链接（若无相关数据或链接则静默跳过）。
-
----
-
-## 体系结构与芯片动态 (Silicon & Microarchitecture)
-根据真实上下文整理，每条必须附原始链接（若无相关数据或链接则静默跳过）。
-
----
-
-## HPC、编译优化与 Linux Kernel (HPC, Compilers & Kernel)
-根据真实上下文整理 LLVM、CUDA、Linux Kernel 与 HPC 动态，每条必须附原始链接（若无相关数据或链接则静默跳过）。
-
----
-
-## 必读前沿论文与开源仓库 (ArXiv & Open Source)
-根据真实上下文整理，附原始链接。
+风格要求：
+- 每条都必须是「性能干货」，宁可少而精，不要堆砌无关条目。
+- 可附一句克制的编辑点评，但必须基于上下文、客观中立，禁止编造观点。
+- 论文/第三方评测必须标注「第三方/社区」属性；未落地内容不得写成「重大突破」。
+- 所有链接必须逐字取自【真实抓取数据上下文】，缺链接或对不上则整条剔除。
 """
 
     try:
         briefing_response = client.chat.completions.create(
-            model="deepseek-chat",
+            model=DEEPSEEK_MODEL,
             messages=[
                 {"role": "system", "content": "你是一个严谨、苛刻的技术核查编辑。只提炼真实上下文，绝不夸大事实，没有数据的板块直接跳过。"},
                 {"role": "user", "content": briefing_prompt}
