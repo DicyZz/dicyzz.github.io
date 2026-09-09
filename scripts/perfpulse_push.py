@@ -7,6 +7,7 @@ from email.mime.multipart import MIMEMultipart
 from openai import OpenAI
 import markdown
 from premailer import transform
+import feedparser
 
 # 读取环境变量
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
@@ -21,8 +22,51 @@ EMAIL_SENDER = os.environ.get("EMAIL_SENDER", "")
 EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")
 
+# ---------------------------------------------------------------------------
+# 1. 数据采集层：从真实可靠的技术 RSS 源获取最新 Raw Content
+# ---------------------------------------------------------------------------
+RSS_FEEDS = {
+    "LWN (Linux Kernel)": "https://lwn.net/headlines/rss",
+    "Phoronix (Hardware/Linux)": "https://www.phoronix.com/rss.php",
+    "PyTorch Blog": "https://pytorch.org/feed.xml",
+    "ArXiv Computer Architecture (cs.AR)": "http://export.arxiv.org/rss/cs.AR",
+    "ArXiv Distributed Computing (cs.DC)": "http://export.arxiv.org/rss/cs.DC",
+}
+
+def fetch_real_tech_news(max_items_per_feed=3):
+    """从真实 RSS 源拉取最新的文章标题和摘要，彻底消除 LLM 凭空臆造的根源。"""
+    print("1. 正在拉取真实权威数据源 (RSS Feeds)...")
+    raw_articles = []
+    
+    for source_name, feed_url in RSS_FEEDS.items():
+        try:
+            feed = feedparser.parse(feed_url)
+            for entry in feed.entries[:max_items_per_feed]:
+                title = entry.get("title", "").strip()
+                link = entry.get("link", "").strip()
+                summary = entry.get("summary", entry.get("description", "")).strip()
+                # 简单清洗 HTML 标签
+                summary_clean = summary[:300].replace("<p>", "").replace("</p>", "").replace("\n", " ")
+                
+                raw_articles.append(f"【来源: {source_name}】\n标题: {title}\n链接: {link}\n摘要: {summary_clean}\n")
+        except Exception as e:
+            print(f"⚠️ 拉取 {source_name} 失败: {e}")
+
+    if not raw_articles:
+        print("❌ 未抓取到任何真实新闻，终止以防幻觉生成。")
+        sys.exit(1)
+        
+    print(f"✅ 成功抓取到 {len(raw_articles)} 条真实技术资讯！")
+    return "\n---\n".join(raw_articles)
+
+
+# ---------------------------------------------------------------------------
+# 2. LLM 总结层：基于真实上下文生成简报
+# ---------------------------------------------------------------------------
 def generate_briefing():
-    print("1. 正在通过 DeepSeek 生成 PerfPulse 技术简报...")
+    real_news_context = fetch_real_tech_news()
+
+    print("2. 正在通过 DeepSeek 基于【真实抓取数据】总结 PerfPulse 技术简报...")
     if not DEEPSEEK_API_KEY:
         print("❌ 错误：未配置 DEEPSEEK_API_KEY！")
         sys.exit(1)
@@ -32,37 +76,26 @@ def generate_briefing():
         base_url="https://api.deepseek.com"
     )
 
-    # 动态获取当前精确日期与时间
     now = datetime.now()
     today_str = now.strftime("%Y年%m月%d日")
     exact_iso_time = now.strftime("%Y-%m-%d %H:%M:%S")
 
+    # 注意：系统提示词中增加了严格的 Grounding（防幻觉）约束
     prompt = f"""
 你是一位专注于计算机体系结构、高性能计算（HPC）、LLM 系统架构与系统性能调优的顶级资深架构师。
 当前系统时间：{exact_iso_time}。今天是 {today_str}。
 
 ### 核心任务：
-请为 {today_str} 生成一份最新的【PerfPulse 每日技术简报】。
+请基于下方提供的【真实抓取到的最新技术资讯】，归纳总结一份【PerfPulse 每日技术简报】。
 
-### 时效性与最新内容强制约束（CRITICAL）：
-1. 必须聚焦近期的最新行业动态、最新 Commit、最新的论文/Patch 与 Benchmark。
-2. 严禁生成过时的常识性科普，严禁撰写虚假或过期的技术新闻。
+================【真实抓取数据上下文】================
+{real_news_context}
+======================================================
 
----
-
-### 强制对标来源领域：
-
-#### LLM 系统与 AI Infra
-vLLM / SGLang GitHub & Blog, PyTorch Engineering Blog, NVIDIA Technical Blog, Tri Dao (FlashAttention) 动态, ArXiv (`cs.AR`, `cs.DC`, `cs.CL`), SemiAnalysis.
-
-#### 体系结构与芯片/IP 微架构
-Chips and Cheese, ServeTheHome, RISC-V International, ACM SIGARCH, IEEE Micro, AnandTech, WikiChip ARM.
-
-#### HPC 与编译优化
-LLVM Discourse/Commits, GCC Mailing List, MLIR News, TVM Discourse, OneAPI / ROCm Release Notes.
-
-#### Linux 内核与系统性能调优
-LWN.net, LKML, Brendan Gregg's Blog, ebpf.io, Cloudflare / Netflix TechBlog, Phoronix.
+### 防幻觉与事实对齐强制约束（CRITICAL）：
+1. **绝对禁令**：你撰写的所有技术看点、性能提速百分比、内核参数或项目发布，**必须严格且仅来自于上述【真实抓取数据上下文】**！
+2. **严禁编造**：如果在抓取数据中没有找到某个领域的动态，直接跳过该板块或明确声明“今日无新增该领域动态”，**严禁自己发明/虚构任何新闻、版本号、性能数据或代码库**！
+3. **保留原文链接**：每个看点结尾处的 [来源/链接] 必须原封不动使用抓取数据中提供的原始 URL。
 
 ---
 
@@ -79,18 +112,11 @@ LWN.net, LKML, Brendan Gregg's Blog, ebpf.io, Cloudflare / Netflix TechBlog, Pho
 > 🎧 **主题**：[填写今日深度剖析的核心主题]  
 > 💡 *提示：点击上方播放按钮，在通勤路上听完今日最核心的微架构瓶颈突破逻辑。*
 
-#### 视频/论文演示卡片
-若有视频/ Talk，按以下格式插入：
-> 🎬 **视频演示 / Talk 推荐**：  
-> 🔗 **视频标题**：[视频/讲座名称]  
-> 📌 **核心看点**：[1句话说明视频展示的 benchmark 跑分或 CPU/GPU 内存火焰图] [查看视频/演示链接](链接地址)
-
 ---
 
 ### 干货专区与格式规范（必须严格执行）：
-1. **干货代码块规范**：所有 perf 诊断命令、sysctl 参数、LLVM 编译 Flag、C++/Python/Rust 代码片段，必须且只能包裹在标准的 Markdown 围栏代码块中（例如 ```bash、```cpp、```python），严禁使用内联杂乱文本混排。
+1. **干货代码块规范**：所有 perf 诊断命令、sysctl 参数、代码片段，必须且只能包裹在标准的 Markdown 围栏代码块中（例如 ```bash、```cpp）。
 2. **绝对禁止符号**：全局严禁使用任何项目符号（如 `-`、`*`、`+`）或数字列表序号（如 `1.`、`2.`）。
-3. **三点排版规则**：除 TL;DR 外，其余每个核心板块必须精确包含 **3 个** 独立的技术看点，看点必须**直接提炼为独立子标题**（使用 `###`）。
 
 ---
 
@@ -100,93 +126,48 @@ LWN.net, LKML, Brendan Gregg's Blog, ebpf.io, Cloudflare / Netflix TechBlog, Pho
 ## 30 秒极速看点 (TL;DR)
 
 ### 突破/论文/开源发布
-一句话总结最新震撼的突破/论文/开源发布。
+一句话总结真实数据中的最新突破。
 
 ### 芯片与 LLM 引擎收益
-一句话总结芯片或 LLM 引擎的核心性能收益。
+一句话总结真实的芯片/AI引擎动态。
 
 ### Kernel 与编译调优干货
-一句话总结 Kernel 或编译调优干货。
+一句话总结真实的 Kernel/系统动态。
 
 ---
 
 ## 今日深度剖析 (Today's Deep Dive)
-挑选 1 个最具有架构影响力的技术突破/论文/开源重构，进行 300 字左右的架构级深度分析（微架构影响、Bottleneck 突破逻辑与性能收益）。
+挑选上述真实资讯中最重要的一条，进行架构级别的深度解读（大约 200-300 字）。
 
 ---
 
 ## LLM 系统与推理/训练加速 (LLM Infra & Acceleration)
-
-### [技术看点一短标题]
-具体技术分析、具体参数、性能数据，末尾带上 [来源/GitHub/ArXiv] 链接。
-
-### [技术看点二短标题]
-具体技术分析、具体参数、性能数据，末尾带上 [来源/GitHub/ArXiv] 链接。
-
-### [技术看点三短标题]
-具体技术分析、具体参数、性能数据，末尾带上 [来源/GitHub/ArXiv] 链接。
+根据真实抓取数据整理看点，附真实链接。无数据可少写或不写。
 
 ---
 
 ## 体系结构与芯片动态 (Silicon & Microarchitecture)
-
-### [技术看点一短标题]
-具体技术分析与指令集/微架构细节，末尾带上 [来源] 链接。
-
-### [技术看点二短标题]
-具体技术分析与指令集/微架构细节，末尾带上 [来源] 链接。
-
-### [技术看点三短标题]
-具体技术分析与指令集/微架构细节，末尾带上 [来源] 链接。
-
----
-
-## 高性能计算与编译优化 (HPC & Compilers)
-
-### [技术看点一短标题]
-LLVM/GCC/Pass 优化与编译 Flag 分析，末尾带上 [来源] 链接。
-
-### [技术看点二短标题]
-LLVM/GCC/Pass 优化与编译 Flag 分析，末尾带上 [来源] 链接。
-
-### [技术看点三短标题]
-LLVM/GCC/Pass 优化与编译 Flag 分析，末尾带上 [来源] 链接。
+根据真实抓取数据整理看点，附真实链接。
 
 ---
 
 ## 系统性能调优与 Kernel (Kernel & Performance)
-
-### [技术看点一短标题]
-Perf/eBPF 诊断、Kernel Patch 与性能调优细节，末尾带上 [来源] 链接。
-
-### [技术看点二短标题]
-Perf/eBPF 诊断、Kernel Patch 与性能调优细节，末尾带上 [来源] 链接。
-
-### [技术看点三短标题]
-Perf/eBPF 诊断、Kernel Patch 与性能调优细节，末尾带上 [来源] 链接。
+根据真实抓取数据整理看点，附真实链接。
 
 ---
 
 ## 必读前沿论文与开源仓库 (ArXiv & Open Source)
-
-### [项目/论文一短标题]
-核心创新点、性能 Benchmark、开源地址或 ArXiv 链接。
-
-### [项目/论文二短标题]
-核心创新点、性能 Benchmark、开源地址或 ArXiv 链接。
-
-### [项目/论文三短标题]
-核心创新点、性能 Benchmark、开源地址或 ArXiv 链接。
+根据真实抓取数据中的 ArXiv 文章整理，附原始 ArXiv 链接。
 """
 
     try:
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "你是一个极具技术深度的系统与大模型硬件性能架构师，善于追踪并精炼最前沿的技术情报，且熟知公众号与极客社区的高质量排版习惯。"},
+                {"role": "system", "content": "你是一个严谨的技术简报编辑器。你唯一的职责是根据用户提供的【真实新闻上下文】进行提炼和排版，绝对不捏造任何未在上下文中提及的事实。"},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.5,
+            temperature=0.1,  # 降低 Temperature，进一步压制随机联想与幻觉
             stream=False
         )
         
@@ -199,14 +180,14 @@ Perf/eBPF 诊断、Kernel Patch 与性能调优细节，末尾带上 [来源] �
         if content.endswith("```"):
             content = content[:-3]
 
-        print("✅ 最新 PerfPulse 简报生成成功！")
+        print("✅ 基于真实数据的 PerfPulse 简报生成成功！")
         return content.strip()
     except Exception as e:
         print(f"❌ DeepSeek 生成简报失败: {str(e)}")
         sys.exit(1)
 
 def send_email(subject, md_content):
-    print("2. 正在渲染适配微信公众号排版的高颜值 HTML 邮件...")
+    print("3. 正在渲染适配微信公众号排版的高颜值 HTML 邮件...")
 
     sender = EMAIL_SENDER.strip() if EMAIL_SENDER else ""
     receiver = EMAIL_RECEIVER.strip() if EMAIL_RECEIVER else sender
@@ -294,13 +275,6 @@ def send_email(subject, md_content):
       border-bottom: 1px solid #e2e8f0;
       padding-bottom: 6px;
     }}
-    h4 {{
-      font-size: 15px;
-      color: #1e293b;
-      margin-top: 20px;
-      margin-bottom: 10px;
-      font-weight: 600;
-    }}
     p {{
       margin: 12px 0 16px 0;
       color: #334155;
@@ -333,9 +307,6 @@ def send_email(subject, md_content):
       font-size: 88%;
       font-weight: 600;
     }}
-    /* ------------------------------------------------------------------- */
-    /* 干货代码块精细化调优（黑客暗色高亮） */
-    /* ------------------------------------------------------------------- */
     pre {{
       background-color: #0f172a !important;
       color: #f8fafc !important;
@@ -388,20 +359,20 @@ def send_email(subject, md_content):
   <div class="container">
     <div class="header">
       <h1>⚡ PerfPulse 每日技术与架构简报</h1>
-      <div class="subtitle">发布日期：{today_date} | 聚焦 LLM 系统加速 · CPU/GPU 微架构 · HPC 编译优化 · Linux Kernel</div>
+      <div class="subtitle">发布日期：{today_date} | 聚焦真实 LLM 系统加速 · CPU/GPU 微架构 · Linux Kernel</div>
     </div>
     <div class="content">
       {raw_html}
     </div>
     <div class="footer">
-      由 DeepSeek & PerfPulse 自动化驱动构建 | 保持对底层技术的终极好奇
+      基于真实权威数据源 (RAG) & DeepSeek 自动化构建
     </div>
   </div>
 </body>
 </html>
 """
 
-    print("3. 正在使用 Premailer 自动将 CSS 样式转换为内联属性...")
+    print("4. 正在使用 Premailer 自动将 CSS 样式转换为内联属性...")
     inlined_html = transform(styled_html)
 
     message = MIMEMultipart()
@@ -420,7 +391,7 @@ def send_email(subject, md_content):
         server.login(sender, EMAIL_PASSWORD.strip())
         server.sendmail(sender, [receiver], message.as_string())
         server.quit()
-        print("🎉 包含全量 News 书签数据源的 PerfPulse 简报已成功发送！")
+        print("🎉 包含真实权威数据源的真实 PerfPulse 简报已成功发送！")
     except Exception as e:
         print(f"❌ 邮件发送失败: {str(e)}")
         sys.exit(1)
