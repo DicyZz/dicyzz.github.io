@@ -104,7 +104,7 @@ def clean_html_summary(html_text):
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
     return clean_text[:400]
 
-def is_recent_entry(entry, max_hours=72):
+def is_recent_entry(entry, max_hours=168):
     """检查文章是否在最近 max_hours 小时内发布"""
     published_struct = entry.get("published_parsed") or entry.get("updated_parsed")
     if not published_struct:
@@ -116,8 +116,8 @@ def is_recent_entry(entry, max_hours=72):
     except Exception:
         return True
 
-def fetch_single_feed(source_name, feed_url, category, max_items=4):
-    """单源抓取函数（增加超时与 48 小时时间过滤）"""
+def fetch_single_feed(source_name, feed_url, category, max_items=6):
+    """单源抓取函数（增加超时与 7 天时间过滤）"""
     if not feed_url.startswith("http"):
         feed_url = "https://" + feed_url
 
@@ -134,7 +134,7 @@ def fetch_single_feed(source_name, feed_url, category, max_items=4):
         count = 0
 
         for entry in feed.entries:
-            if not is_recent_entry(entry, max_hours=72):
+            if not is_recent_entry(entry, max_hours=168):
                 continue
 
             if count >= max_items:
@@ -159,14 +159,14 @@ def fetch_single_feed(source_name, feed_url, category, max_items=4):
 
 def fetch_all_feeds():
     """并发并行抓取全量 RSS 订阅点"""
-    print("1. 正在通过并发线程池拉取全球技术数据源（含超时控制与 48h 过滤）...")
+    print("1. 正在通过并发线程池拉取全球技术数据源（含超时控制与 7 天过滤）...")
     raw_articles = []
     
     with ThreadPoolExecutor(max_workers=25) as executor:
         future_to_source = {}
         for category, feeds in MODULE_FEEDS.items():
             for source_name, feed_url in feeds.items():
-                future = executor.submit(fetch_single_feed, source_name, feed_url, category, max_items=4)
+                future = executor.submit(fetch_single_feed, source_name, feed_url, category, max_items=6)
                 future_to_source[future] = source_name
 
         for future in as_completed(future_to_source):
@@ -175,8 +175,8 @@ def fetch_all_feeds():
                 raw_articles.extend(items)
 
     if not raw_articles:
-        print("⚠️ 未抓取到 48 小时内的新资讯，将使用保底逻辑。")
-        return "今日暂无 48 小时内的新动态更新。"
+        print("⚠️ 未抓取到 7 天内的新资讯，将使用保底逻辑。")
+        return "本周暂无 7 天内的新动态更新。"
 
     print(f"✅ 成功从权威源中抓取并筛选出 {len(raw_articles)} 条最新资讯！")
     return "\n---\n".join(raw_articles)
@@ -205,7 +205,7 @@ def generate_briefing():
 当前时间：{exact_iso_time}。
 
 ### 核心任务：
-基于下方【真实抓取数据上下文】，整理一份【PerfPulse 每日架构与系统性能简报】。
+基于下方【真实抓取数据上下文】，整理一份【PerfPulse 每周架构与系统性能简报】。
 
 ================【真实抓取数据上下文】================
 {real_news_context}
@@ -378,7 +378,7 @@ def send_email(subject, md_content):
 <body>
   <div class="container">
     <div class="header">
-      <h1>⚡ PerfPulse 每日微架构、系统与 HPC 简报</h1>
+      <h1>⚡ PerfPulse 每周微架构、系统与 HPC 简报</h1>
       <div class="subtitle">发布日期：{today_date} | 真实硬件、LLM 加速与 Linux Kernel 严谨跟踪</div>
     </div>
     <div class="content">
@@ -423,4 +423,4 @@ def send_email(subject, md_content):
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     md_content = generate_briefing()
-    send_email("【PerfPulse】每日硬件、微架构与 LLM 性能简报", md_content)
+    send_email("【PerfPulse】每周硬件、微架构与 LLM 性能简报", md_content)
