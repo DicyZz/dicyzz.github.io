@@ -59,11 +59,15 @@ MODULE_FEEDS = {
         "Johnny's Software Lab": "https://johnysswlab.com/feed/",
         "Fabian Giesen (ryg)": "https://fgiesen.wordpress.com/feed/",
         "Herb Sutter": "https://herbsutter.com/feed/",
-        "Old New Thing": "https://devblogs.microsoft.com/oldnewthing/feed/",
         "Real World Tech": "https://www.realworldtech.com/feed/",
+        "Travis Downs (perf analysis)": "https://travisdowns.github.io/feed.xml",
+        "Jeff Preshing (concurrency/perf)": "https://preshing.com/feed/",
+        "John Regehr (compilers)": "https://blog.regehr.org/feed/",
+        "Paul E. McKenney (kernel/RCU)": "https://paulmck.livejournal.com/data/rss",
+        "High Scalability": "https://highscalability.com/feed/",
+        "SemiAnalysis (chips/inference)": "https://semianalysis.com/feed/",
         "Cloudflare Tech Blog": "https://blog.cloudflare.com/rss/",
         "Netflix Tech Blog": "https://netflixtechblog.com/feed",
-        "PyTorch Blog": "https://pytorch.org/blog/feed.xml",
         "Hugging Face Blog": "https://huggingface.co/blog/feed.xml",
         "Anyscale / Ray Blog": "https://www.anyscale.com/blog/rss.xml",
         "DeepSpeed Blog": "https://www.deepspeed.ai/feed.xml",
@@ -130,11 +134,11 @@ def fetch_single_feed(source_name, feed_url, category, max_items=4):
         count = 0
 
         for entry in feed.entries:
-            if count >= max_items:
-                break
-            
             if not is_recent_entry(entry, max_hours=72):
                 continue
+
+            if count >= max_items:
+                break
 
             title = entry.get("title", "").strip()
             link = entry.get("link", "").strip()
