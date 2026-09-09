@@ -30,72 +30,65 @@ EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")
 
 # ---------------------------------------------------------------------------
-# 1. 各模块 Top 顶级数据源全量配置
+# 1. 各模块 Top 顶级数据源全量配置（按简报四板块组织）
 # ---------------------------------------------------------------------------
 MODULE_FEEDS = {
-    # === 模块一：LLM 系统与推理/训练加速 ===
-    "LLM_Infra": {
-        "ArXiv Machine Learning (cs.LG)": "http://export.arxiv.org/rss/cs.LG",
-        "ArXiv Computation and Language (cs.CL)": "http://export.arxiv.org/rss/cs.CL",
-        "ArXiv Artificial Intelligence (cs.AI)": "http://export.arxiv.org/rss/cs.AI",
-        "PyTorch Official Blog": "https://pytorch.org/feed.xml",
-        "Hugging Face Blog": "https://huggingface.co/blog/feed.xml",
-        "Anyscale / Ray Blog": "https://www.anyscale.com/blog/rss.xml",
-        "vLLM Official Blog": "https://blog.vllm.ai/feed.xml",
-        "vLLM GitHub Releases": "https://github.com/vllm-project/vllm/releases.atom",
-        "TensorRT-LLM GitHub Releases": "https://github.com/NVIDIA/TensorRT-LLM/releases.atom",
-        "DeepSpeed Official Blog": "https://www.deepspeed.ai/feed.xml",
-        "Triton Compiler Blog": "https://triton-lang.org/main/feed.xml",
-        "MLSys Conference News": "https://mlsys.org/rss.xml",
-        "OpenAI Research": "https://openai.com/news/rss.xml",
-        "Google AI Blog": "https://research.google/blog/rss/",
-        "Meta AI Blog": "https://ai.meta.com/blog/rss/",
-        "NVIDIA Developer AI Blog": "https://developer.nvidia.com/blog/category/ai-deep-learning/feed/",
-        "LlamaIndex Blog": "https://www.llamaindex.ai/blog/rss.xml",
-        "LangChain Blog": "https://blog.langchain.dev/rss/",
-        "Unsloth AI Blog": "https://unsloth.ai/blog/rss.xml",
-        "Together AI Blog": "https://www.together.ai/blog/rss.xml",
-        "Groq Hardware & Infra": "https://groq.com/feed/",
-        "Modal Labs Blog": "https://modal.com/blog/feed.xml",
-        "Paper with Code Trending": "https://paperswithcode.com/rss/latest"
-    },
-
-    # === 模块二：体系结构与 CPU/GPU 芯片动态 ===
-    "Silicon_Architecture": {
-        "Chips and Cheese": "https://chipsandcheese.com/feed/",
-        "ArXiv Computer Architecture (cs.AR)": "http://export.arxiv.org/rss/cs.AR",
+    # === 新闻与发布 ===
+    "News": {
+        "Phoronix Processors": "https://www.phoronix.com/rss.php",
+        "LWN.net (Linux Kernel Direct)": "https://lwn.net/headlines/rss",
+        "Kernel.org Releases": "https://www.kernel.org/feeds/kdist.xml",
         "SemiEngineering": "https://semiengineering.com/feed/",
-        "WikiChip Fuse": "https://fuse.wikichip.org/feed/",
-        "ServeTheHome (STH)": "https://www.servethehome.com/feed/",
         "The Next Platform": "https://www.nextplatform.com/feed/",
         "EE Times Global": "https://www.eetimes.com/feed/",
         "IEEE Spectrum Chips": "https://spectrum.ieee.org/feeds/topic/semiconductors.rss",
-        "Phoronix Processors": "https://www.phoronix.com/rss.php",
-        "ARM Technical Articles": "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/rss",
-        "RISC-V International News": "https://riscv.org/news/feed/",
-        "SiFive RISC-V Blog": "https://www.sifive.com/blog/rss.xml",
-        "Tenstorrent Blog": "https://tenstorrent.com/feed/",
-        "YouTube - Asianometry": "https://www.youtube.com/feeds/videos.xml?channel_id=UC19beC0uPyeAC062A0p4JpA",
-        "YouTube - TechTechPotato": "https://www.youtube.com/feeds/videos.xml?channel_id=UC1ZfSfZ0A_L4b40uJ5-G9_w"
+        "ServeTheHome (STH)": "https://www.servethehome.com/feed/",
+        "HPC Wire": "https://www.hpcwire.com/feed/",
+        "LLVM Weekly": "https://llvmweekly.org/rss.xml",
+        "OpenAI Research": "https://openai.com/news/rss.xml",
+        "Google AI Blog": "https://research.google/blog/rss/",
     },
 
-    # === 模块三：HPC、编译优化与 Linux Kernel ===
-    "Kernel_Performance_HPC": {
-        "LLVM Weekly": "llvmweekly.org/rss.xml",
-        "LLVM Compiler Blog": "https://blog.llvm.org/feed.xml",
-        "GCC Compiler News": "https://gcc.gnu.org/rss.xml",
-        "LWN.net (Linux Kernel Direct)": "https://lwn.net/headlines/rss",
+    # === 深度文章 / 性能博客 ===
+    "Blog_Posts": {
         "Brendan Gregg Performance Blog": "https://www.brendangregg.com/blog/rss.xml",
-        "Kernel.org Releases": "https://www.kernel.org/feeds/kdist.xml",
-        "eBPF Official Blog": "https://ebpf.io/feed.xml",
-        "Rust Compiler & Performance": "https://blog.rust-lang.org/feed.xml",
-        "ArXiv Distributed Computing (cs.DC)": "http://export.arxiv.org/rss/cs.DC",
-        "ArXiv Performance Evaluation (cs.PF)": "http://export.arxiv.org/rss/cs.PF",
+        "Easyperf (Denis Bakhvalov)": "https://easyperf.net/feed.xml",
+        "Chips and Cheese": "https://chipsandcheese.com/feed/",
+        "Daniel Lemire": "https://lemire.me/blog/feed/",
+        "MaskRay (compiler/linker)": "https://maskray.me/blog/atom.xml",
+        "Johnny's Software Lab": "https://johnysswlab.com/feed/",
+        "Fabian Giesen (ryg)": "https://fgiesen.wordpress.com/feed/",
+        "Herb Sutter": "https://herbsutter.com/feed/",
+        "Old New Thing": "https://devblogs.microsoft.com/oldnewthing/feed/",
+        "Real World Tech": "https://www.realworldtech.com/feed/",
         "Cloudflare Tech Blog": "https://blog.cloudflare.com/rss/",
         "Netflix Tech Blog": "https://netflixtechblog.com/feed",
+        "PyTorch Blog": "https://pytorch.org/blog/feed.xml",
+        "Hugging Face Blog": "https://huggingface.co/blog/feed.xml",
+        "Anyscale / Ray Blog": "https://www.anyscale.com/blog/rss.xml",
+        "DeepSpeed Blog": "https://www.deepspeed.ai/feed.xml",
+        "NVIDIA Developer AI Blog": "https://developer.nvidia.com/blog/category/ai-deep-learning/feed/",
         "NVIDIA CUDA & Systems Blog": "https://developer.nvidia.com/blog/category/cuda/feed/",
-        "AMD Instinct & ROCm Docs": "https://rocm.docs.amd.com/en/latest/rss.xml",
-        "Hacker News Systems Tech": "https://news.ycombinator.com/rss"
+        "Rust Compiler & Performance": "https://blog.rust-lang.org/feed.xml",
+        "ARM Technical Articles": "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/rss",
+        "SiFive RISC-V Blog": "https://www.sifive.com/blog/rss.xml",
+    },
+
+    # === 论文 ===
+    "Research_Papers": {
+        "ArXiv Machine Learning (cs.LG)": "http://export.arxiv.org/api/query?search_query=cat:cs.LG&sortBy=submittedDate&sortOrder=descending&max_results=10",
+        "ArXiv Computation and Language (cs.CL)": "http://export.arxiv.org/api/query?search_query=cat:cs.CL&sortBy=submittedDate&sortOrder=descending&max_results=10",
+        "ArXiv Artificial Intelligence (cs.AI)": "http://export.arxiv.org/api/query?search_query=cat:cs.AI&sortBy=submittedDate&sortOrder=descending&max_results=10",
+        "ArXiv Computer Architecture (cs.AR)": "http://export.arxiv.org/api/query?search_query=cat:cs.AR&sortBy=submittedDate&sortOrder=descending&max_results=10",
+        "ArXiv Distributed Computing (cs.DC)": "http://export.arxiv.org/api/query?search_query=cat:cs.DC&sortBy=submittedDate&sortOrder=descending&max_results=10",
+        "ArXiv Performance Evaluation (cs.PF)": "http://export.arxiv.org/api/query?search_query=cat:cs.PF&sortBy=submittedDate&sortOrder=descending&max_results=10",
+    },
+
+    # === 其他资料（发布、工具、聚合） ===
+    "Other_Materials": {
+        "vLLM GitHub Releases": "https://github.com/vllm-project/vllm/releases.atom",
+        "TensorRT-LLM GitHub Releases": "https://github.com/NVIDIA/TensorRT-LLM/releases.atom",
+        "Hacker News Systems Tech": "https://news.ycombinator.com/rss",
     }
 }
 
