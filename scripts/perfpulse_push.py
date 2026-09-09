@@ -1,5 +1,7 @@
 import os
 import sys
+import re
+import asyncio
 import smtplib
 from datetime import datetime
 from email.mime.text import MIMEText
@@ -8,8 +10,11 @@ from openai import OpenAI
 import markdown
 from premailer import transform
 import feedparser
+import edge_tts
 
+# ---------------------------------------------------------------------------
 # 读取环境变量
+# ---------------------------------------------------------------------------
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
 
@@ -23,19 +28,27 @@ EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")
 
 # ---------------------------------------------------------------------------
-# 1. 数据采集层：从真实可靠的技术 RSS 源获取最新 Raw Content
+# 1. RSS 数据源定义与抓取
 # ---------------------------------------------------------------------------
 RSS_FEEDS = {
     "LWN (Linux Kernel)": "https://lwn.net/headlines/rss",
-    "Phoronix (Hardware/Linux)": "https://www.phoronix.com/rss.php",
+    "Phoronix (Hardware & OS)": "https://www.phoronix.com/rss.php",
     "PyTorch Blog": "https://pytorch.org/feed.xml",
     "ArXiv Computer Architecture (cs.AR)": "http://export.arxiv.org/rss/cs.AR",
     "ArXiv Distributed Computing (cs.DC)": "http://export.arxiv.org/rss/cs.DC",
 }
 
+def clean_html_summary(html_text):
+    """清洗 HTML 标签，保留纯文本内容以提升上下文准确率"""
+    if not html_text:
+        return ""
+    clean_text = re.sub(r'<[^>]+>', ' ', html_text)
+    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+    return clean_text[:600]
+
 def fetch_real_tech_news(max_items_per_feed=3):
-    """从真实 RSS 源拉取最新的文章标题和摘要，彻底消除 LLM 凭空臆造的根源。"""
-    print("1. 正在拉取真实权威数据源 (RSS Feeds)...")
+    """从真实 RSS 源抓取并进行二次清洗"""
+    print("1. 正在拉取权威 RSS 数据源...")
     raw_articles = []
     
     for source_name, feed_url in RSS_FEEDS.items():
@@ -44,29 +57,34 @@ def fetch_real_tech_news(max_items_per_feed=3):
             for entry in feed.entries[:max_items_per_feed]:
                 title = entry.get("title", "").strip()
                 link = entry.get("link", "").strip()
-                summary = entry.get("summary", entry.get("description", "")).strip()
-                # 简单清洗 HTML 标签
-                summary_clean = summary[:300].replace("<p>", "").replace("</p>", "").replace("\n", " ")
+                summary = entry.get("summary", entry.get("description", ""))
+                summary_clean = clean_html_summary(summary)
                 
-                raw_articles.append(f"【来源: {source_name}】\n标题: {title}\n链接: {link}\n摘要: {summary_clean}\n")
+                if title:
+                    raw_articles.append(
+                        f"【数据源: {source_name}】\n"
+                        f"原始标题: {title}\n"
+                        f"原始链接: {link}\n"
+                        f"正文摘要: {summary_clean}\n"
+                    )
         except Exception as e:
             print(f"⚠️ 拉取 {source_name} 失败: {e}")
 
     if not raw_articles:
-        print("❌ 未抓取到任何真实新闻，终止以防幻觉生成。")
+        print("❌ 未抓取到任何真实新闻，终止程序。")
         sys.exit(1)
         
-    print(f"✅ 成功抓取到 {len(raw_articles)} 条真实技术资讯！")
+    print(f"✅ 成功提取并清洗 {len(raw_articles)} 条真实技术资讯！")
     return "\n---\n".join(raw_articles)
 
 
 # ---------------------------------------------------------------------------
-# 2. LLM 总结层：基于真实上下文生成简报
+# 2. DeepSeek 生成文字简报与音频朗读脚本
 # ---------------------------------------------------------------------------
-def generate_briefing():
+def generate_briefing_and_audio_script():
     real_news_context = fetch_real_tech_news()
 
-    print("2. 正在通过 DeepSeek 基于【真实抓取数据】总结 PerfPulse 技术简报...")
+    print("2. 正在通过 DeepSeek 严格基于真实数据生成简报与播客脚本...")
     if not DEEPSEEK_API_KEY:
         print("❌ 错误：未配置 DEEPSEEK_API_KEY！")
         sys.exit(1)
@@ -77,123 +95,151 @@ def generate_briefing():
     )
 
     now = datetime.now()
-    today_str = now.strftime("%Y年%m月%d日")
     exact_iso_time = now.strftime("%Y-%m-%d %H:%M:%S")
 
-    # 注意：系统提示词中增加了严格的 Grounding（防幻觉）约束
-    prompt = f"""
-你是一位专注于计算机体系结构、高性能计算（HPC）、LLM 系统架构与系统性能调优的顶级资深架构师。
-当前系统时间：{exact_iso_time}。今天是 {today_str}。
+    # 1. 生成文字简报 Prompt
+    briefing_prompt = f"""
+你是一位极度严谨的系统与硬件架构师兼科技编辑。
+当前时间：{exact_iso_time}。
 
 ### 核心任务：
-请基于下方提供的【真实抓取到的最新技术资讯】，归纳总结一份【PerfPulse 每日技术简报】。
+基于下方【真实抓取数据上下文】，整理一份【PerfPulse 每日技术简报】。
 
 ================【真实抓取数据上下文】================
 {real_news_context}
 ======================================================
 
-### 防幻觉与事实对齐强制约束（CRITICAL）：
-1. **绝对禁令**：你撰写的所有技术看点、性能提速百分比、内核参数或项目发布，**必须严格且仅来自于上述【真实抓取数据上下文】**！
-2. **严禁编造**：如果在抓取数据中没有找到某个领域的动态，直接跳过该板块或明确声明“今日无新增该领域动态”，**严禁自己发明/虚构任何新闻、版本号、性能数据或代码库**！
-3. **保留原文链接**：每个看点结尾处的 [来源/链接] 必须原封不动使用抓取数据中提供的原始 URL。
+### 核心防幻觉与事实审判法则（CRITICAL RULES - 必须百分之百遵守）：
+1. 客观语气与进展限定：严禁将“实验”、“讨论”、“初步探究”撰写为“成功落地”或“重大突破”。
+2. 识别第三方项目与官方发布：对于民间第三方开源项目（如 DLSS5VKLayer），必须说明“该项目为第三方社区民间实现，非官方发布”。
+3. 严格数据源对齐：绝不凭空臆造未出现的性能数据、代码片段或链接。
 
 ---
 
-### 多媒体与交互元素插入要求：
-
-#### 科技图表
-首图：![Banner](https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1000&q=80)
-芯片微架构插图：![Microarchitecture](https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1000&q=80)
-系统调优插图：![System Performance](https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1000&q=80)
-
-#### 音频/播客解读卡片
-在“今日深度剖析”之后按以下格式插入：
-> 🎙️ **PerfPulse 3分钟音频架构解读**  
-> 🎧 **主题**：[填写今日深度剖析的核心主题]  
-> 💡 *提示：点击上方播放按钮，在通勤路上听完今日最核心的微架构瓶颈突破逻辑。*
+### 格式与排版规范：
+- 全局严禁使用任何项目符号（`-`、`*`）或数字列表序号（`1.`、`2.`）。
+- 代码片段必须包裹在标准 Markdown 围栏代码块中（```bash 或 ```cpp）。
+- 无对应数据的板块直接忽略。
 
 ---
 
-### 干货专区与格式规范（必须严格执行）：
-1. **干货代码块规范**：所有 perf 诊断命令、sysctl 参数、代码片段，必须且只能包裹在标准的 Markdown 围栏代码块中（例如 ```bash、```cpp）。
-2. **绝对禁止符号**：全局严禁使用任何项目符号（如 `-`、`*`、`+`）或数字列表序号（如 `1.`、`2.`）。
-
----
-
-### 输出结构要求：
-严格按以下结构输出 Markdown 内容（切勿在全局包裹 ```markdown 标记）：
+### 输出结构（输出纯 Markdown 内容，切勿包裹全局 ```markdown）：
 
 ## 30 秒极速看点 (TL;DR)
 
 ### 突破/论文/开源发布
-一句话总结真实数据中的最新突破。
+用客观严谨的一句话总结真实发生的最新发布/论文。
 
 ### 芯片与 LLM 引擎收益
-一句话总结真实的芯片/AI引擎动态。
+用客观严谨的一句话总结真实芯片或 AI 系统动态。
 
 ### Kernel 与编译调优干货
-一句话总结真实的 Kernel/系统动态。
+用客观严谨的一句话总结真实 Linux Kernel 或系统调优动态。
 
 ---
 
 ## 今日深度剖析 (Today's Deep Dive)
-挑选上述真实资讯中最重要的一条，进行架构级别的深度解读（大约 200-300 字）。
+挑选上述数据中最具架构深度的一条新闻，进行客观专业的深度分析（200-300 字）。分清“实验成果”与“生产级落地”的界限。
 
 ---
 
 ## LLM 系统与推理/训练加速 (LLM Infra & Acceleration)
-根据真实抓取数据整理看点，附真实链接。无数据可少写或不写。
+根据真实上下文整理（若无相关数据则直接跳过）。
 
 ---
 
 ## 体系结构与芯片动态 (Silicon & Microarchitecture)
-根据真实抓取数据整理看点，附真实链接。
+根据真实上下文整理（若有第三方项目需明确标注“第三方民间实现”）。
 
 ---
 
 ## 系统性能调优与 Kernel (Kernel & Performance)
-根据真实抓取数据整理看点，附真实链接。
+根据真实上下文整理。
 
 ---
 
 ## 必读前沿论文与开源仓库 (ArXiv & Open Source)
-根据真实抓取数据中的 ArXiv 文章整理，附原始 ArXiv 链接。
+根据真实上下文整理，附原始链接。
 """
 
     try:
-        response = client.chat.completions.create(
+        # 生成简报文字
+        briefing_response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "你是一个严谨的技术简报编辑器。你唯一的职责是根据用户提供的【真实新闻上下文】进行提炼和排版，绝对不捏造任何未在上下文中提及的事实。"},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": "你是一个严谨、苛刻的技术新闻核查编辑。你的任务是基于提供的上下文提炼信息，绝不夸大事实。"},
+                {"role": "user", "content": briefing_prompt}
             ],
-            temperature=0.1,  # 降低 Temperature，进一步压制随机联想与幻觉
+            temperature=0.0,
             stream=False
         )
         
-        content = response.choices[0].message.content.strip()
+        md_content = briefing_response.choices[0].message.content.strip()
+        if md_content.startswith("```markdown"):
+            md_content = md_content[11:]
+        elif md_content.startswith("```"):
+            md_content = md_content[3:]
+        if md_content.endswith("```"):
+            md_content = md_content[:-3]
 
-        if content.startswith("```markdown"):
-            content = content[11:]
-        elif content.startswith("```"):
-            content = content[3:]
-        if content.endswith("```"):
-            content = content[:-3]
+        # 2. 基于生成简报提取播客音频口语化脚本 Prompt
+        audio_script_prompt = f"""
+请将以下技术简报转换为一段适合 2-3 分钟口语化播客朗读的文本脚本。
 
-        print("✅ 基于真实数据的 PerfPulse 简报生成成功！")
-        return content.strip()
+要求：
+1. 语言通俗自然、适合听觉吸收，去除所有 Markdown 格式符号（如 `#`、`*`、`[链接]` 等）。
+2. 开头问好：“大家好，欢迎收听 PerfPulse 每日架构听力解读。”
+3. 重点阐述 30 秒极速看点和今日深度剖析的内容。
+4. 保持客观严谨，严禁夸大或编造内容。
+5. 控制在 400-600 字之间。
+
+=== 简报内容 ===
+{md_content}
+"""
+        audio_response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "system", "content": "你是一位专业的科技播客主持人，擅长将硬核技术转换为自然流畅的口语表达。"},
+                {"role": "user", "content": audio_script_prompt}
+            ],
+            temperature=0.2,
+            stream=False
+        )
+        audio_script = audio_response.choices[0].message.content.strip()
+
+        print("✅ 简报文字与播客脚本生成成功！")
+        return md_content.strip(), audio_script
     except Exception as e:
-        print(f"❌ DeepSeek 生成简报失败: {str(e)}")
+        print(f"❌ DeepSeek 生成失败: {str(e)}")
         sys.exit(1)
 
-def send_email(subject, md_content):
-    print("3. 正在渲染适配微信公众号排版的高颜值 HTML 邮件...")
+
+# ---------------------------------------------------------------------------
+# 3. Edge-TTS 异步音频合成
+# ---------------------------------------------------------------------------
+async def generate_audio_async(text, output_mp3_path="perf_pulse_podcast.mp3"):
+    """使用微软 Edge 神经网络语音合成 MP3"""
+    print(f"3. 正在合成 3 分钟播客 MP3 音频文件 ({output_mp3_path})...")
+    voice = "zh-CN-YunxiNeural"  # 云希：自然流畅的科技男声
+    communicate = edge_tts.Communicate(text, voice)
+    await communicate.save(output_mp3_path)
+    print("✅ MP3 音频文件合成完成！")
+
+def create_podcast_audio(script_text, output_file="perf_pulse_podcast.mp3"):
+    asyncio.run(generate_audio_async(script_text, output_file))
+
+
+# ---------------------------------------------------------------------------
+# 4. 邮件渲染与发送
+# ---------------------------------------------------------------------------
+def send_email(subject, md_content, audio_script, mp3_path="perf_pulse_podcast.mp3"):
+    print("4. 正在渲染适配公众号与邮件样式的 HTML 邮件...")
 
     sender = EMAIL_SENDER.strip() if EMAIL_SENDER else ""
     receiver = EMAIL_RECEIVER.strip() if EMAIL_RECEIVER else sender
 
     if not sender or not EMAIL_PASSWORD:
-        print("❌ 错误：缺少邮箱环境变量配置（EMAIL_SENDER / EMAIL_PASSWORD）！")
+        print("❌ 错误：缺少邮箱环境变量配置！")
         sys.exit(1)
 
     raw_html = markdown.markdown(
@@ -203,6 +249,21 @@ def send_email(subject, md_content):
 
     today_date = datetime.now().strftime("%Y-%m-%d")
 
+    # 构建带播客音频脚本展示与在线/附件音频播放提示的头部组件
+    audio_header_html = f"""
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #6366f1; padding: 16px; border-radius: 6px; margin-bottom: 24px;">
+      <div style="font-weight: bold; font-size: 15px; color: #0f172a; margin-bottom: 8px;">
+        🎧 PerfPulse 3分钟音频架构解读
+      </div>
+      <div style="font-size: 13px; color: #475569; line-height: 1.6; margin-bottom: 10px;">
+        {audio_script[:120]}...
+      </div>
+      <div style="font-size: 12px; color: #6366f1; font-weight: 500;">
+        💡 提示：今日音频文件（{mp3_path}）已自动合成并作为邮件附件随信附带，也可在 Github Releases / 播客端播放。
+      </div>
+    </div>
+    """
+
     styled_html = f"""
 <!DOCTYPE html>
 <html>
@@ -210,24 +271,19 @@ def send_email(subject, md_content):
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    *, *:before, *:after {{
-      box-sizing: border-box !important;
-    }}
+    *, *:before, *:after {{ box-sizing: border-box !important; }}
     body {{
-      font-family: -apple-system-font, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", Arial, sans-serif;
+      font-family: -apple-system-font, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", Arial, sans-serif;
       background-color: #ffffff;
       color: #24292e;
       margin: 0;
       padding: 0;
       width: 100% !important;
-      -webkit-text-size-adjust: 100%;
     }}
     .container {{
       width: 100% !important;
-      max-width: 100% !important;
       margin: 0 auto;
       background: #ffffff;
-      overflow: hidden;
     }}
     .header {{
       background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
@@ -235,151 +291,78 @@ def send_email(subject, md_content):
       padding: 24px 16px;
       border-bottom: 3px solid #6366f1;
     }}
-    .header h1 {{
-      margin: 0;
-      font-size: 20px;
-      font-weight: 700;
-      color: #ffffff;
-      letter-spacing: 0.5px;
-      line-height: 1.4;
-    }}
-    .header .subtitle {{
-      margin-top: 10px;
-      font-size: 12px;
-      color: #a5b4fc;
-      line-height: 1.5;
-    }}
-    .content {{
-      padding: 16px 12px;
-      font-size: 15px;
-      line-height: 1.75;
-      color: #334155;
-      word-break: break-word;
-    }}
+    .header h1 {{ margin: 0; font-size: 20px; font-weight: 700; color: #ffffff; }}
+    .header .subtitle {{ margin-top: 10px; font-size: 12px; color: #a5b4fc; }}
+    .content {{ padding: 16px 12px; font-size: 15px; line-height: 1.75; color: #334155; }}
     h2 {{
       color: #0f172a;
       font-size: 17px;
       background: #f1f5f9;
       border-left: 4px solid #4f46e5;
       padding: 8px 12px;
-      border-radius: 0 4px 4px 0;
       margin-top: 36px;
       margin-bottom: 20px;
     }}
-    h3 {{
-      font-size: 16px;
-      color: #0f172a;
-      margin-top: 28px;
-      margin-bottom: 12px;
-      font-weight: 600;
-      border-bottom: 1px solid #e2e8f0;
-      padding-bottom: 6px;
-    }}
-    p {{
-      margin: 12px 0 16px 0;
-      color: #334155;
-      word-wrap: break-word;
-      line-height: 1.75;
-      text-align: justify;
-    }}
-    img {{
-      display: block !important;
-      max-width: 100% !important;
-      height: auto !important;
-      margin: 20px auto !important;
-      border-radius: 8px !important;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
-      border: 1px solid #e2e8f0 !important;
-    }}
-    a {{
-      color: #4f46e5 !important;
-      text-decoration: none !important;
-      font-weight: 500 !important;
-      border-bottom: 1px dashed #6366f1 !important;
-      word-break: break-all !important;
-    }}
-    code {{
-      background-color: #f1f5f9;
-      color: #4f46e5;
-      padding: 2px 5px;
-      border-radius: 4px;
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-      font-size: 88%;
-      font-weight: 600;
-    }}
+    h3 {{ font-size: 16px; color: #0f172a; margin-top: 28px; margin-bottom: 12px; font-weight: 600; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }}
+    p {{ margin: 12px 0 16px 0; color: #334155; line-height: 1.75; text-align: justify; }}
+    a {{ color: #4f46e5 !important; text-decoration: none !important; font-weight: 500 !important; border-bottom: 1px dashed #6366f1 !important; }}
+    code {{ background-color: #f1f5f9; color: #4f46e5; padding: 2px 5px; border-radius: 4px; font-size: 88%; font-weight: 600; }}
     pre {{
       background-color: #0f172a !important;
       color: #f8fafc !important;
       padding: 14px !important;
       border-radius: 6px !important;
       overflow-x: auto !important;
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace !important;
       font-size: 12px !important;
       line-height: 1.6 !important;
       margin: 16px 0 !important;
-      border: 1px solid #1e293b !important;
-      white-space: pre-wrap !important;
-      word-break: break-all !important;
     }}
-    pre code {{
-      background-color: transparent !important;
-      color: #f8fafc !important;
-      padding: 0 !important;
-      font-weight: normal !important;
-    }}
-    blockquote {{
-      margin: 20px 0;
-      padding: 12px 14px;
-      color: #1e293b;
-      border-left: 4px solid #4f46e5;
-      background-color: #f8fafc;
-      border-radius: 0 6px 6px 0;
-      font-size: 14px;
-    }}
-    blockquote p {{
-      margin: 4px 0;
-      color: #334155;
-    }}
-    hr {{
-      border: none;
-      border-top: 1px dashed #cbd5e1;
-      margin: 32px 0;
-    }}
-    .footer {{
-      background-color: #f8fafc;
-      border-top: 1px solid #e2e8f0;
-      padding: 20px 12px;
-      text-align: center;
-      font-size: 12px;
-      color: #94a3b8;
-    }}
+    pre code {{ background-color: transparent !important; color: #f8fafc !important; padding: 0 !important; }}
+    blockquote {{ margin: 20px 0; padding: 12px 14px; color: #1e293b; border-left: 4px solid #4f46e5; background-color: #f8fafc; font-size: 14px; }}
+    .footer {{ background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 12px; text-align: center; font-size: 12px; color: #94a3b8; }}
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
       <h1>⚡ PerfPulse 每日技术与架构简报</h1>
-      <div class="subtitle">发布日期：{today_date} | 聚焦真实 LLM 系统加速 · CPU/GPU 微架构 · Linux Kernel</div>
+      <div class="subtitle">发布日期：{today_date} | 真实硬件、体系结构与 Linux Kernel 严谨跟踪</div>
     </div>
     <div class="content">
+      {audio_header_html}
       {raw_html}
     </div>
     <div class="footer">
-      基于真实权威数据源 (RAG) & DeepSeek 自动化构建
+      基于真实 RSS 订阅源 (RAG) & DeepSeek 零幻觉模式 & Edge-TTS 音频构建
     </div>
   </div>
 </body>
 </html>
 """
 
-    print("4. 正在使用 Premailer 自动将 CSS 样式转换为内联属性...")
+    print("5. 正在进行 CSS 内联化转换...")
     inlined_html = transform(styled_html)
 
     message = MIMEMultipart()
     message["From"] = sender
     message["To"] = receiver
     message["Subject"] = f"{subject} ({today_date})"
+    
+    # 添加 HTML 正文
     message.attach(MIMEText(inlined_html, "html", "utf-8"))
+
+    # 将生成的 MP3 作为邮件附件发送
+    if os.path.exists(mp3_path):
+        try:
+            with open(mp3_path, "rb") as f:
+                audio_data = f.read()
+            audio_attachment = MIMEText(audio_data, "base64", "utf-8")
+            audio_attachment["Content-Type"] = "audio/mpeg"
+            audio_attachment["Content-Disposition"] = f'attachment; filename="{os.path.basename(mp3_path)}"'
+            message.attach(audio_attachment)
+            print("✅ 已成功添加 MP3 音频为邮件附件！")
+        except Exception as e:
+            print(f"⚠️ 添加音频附件失败: {e}")
 
     try:
         if EMAIL_PORT == 465:
@@ -391,11 +374,22 @@ def send_email(subject, md_content):
         server.login(sender, EMAIL_PASSWORD.strip())
         server.sendmail(sender, [receiver], message.as_string())
         server.quit()
-        print("🎉 包含真实权威数据源的真实 PerfPulse 简报已成功发送！")
+        print("🎉 简报正文与 MP3 播客附件已成功发送！")
     except Exception as e:
         print(f"❌ 邮件发送失败: {str(e)}")
         sys.exit(1)
 
+
+# ---------------------------------------------------------------------------
+# 主流程入口
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    content = generate_briefing()
-    send_email("【PerfPulse】每日硬件、系统与 LLM 性能简报", content)
+    # 1. 生成简报与播客脚本
+    md_content, audio_script = generate_briefing_and_audio_script()
+    
+    # 2. 生成 MP3 音频文件
+    mp3_file = "perf_pulse_podcast.mp3"
+    create_podcast_audio(audio_script, mp3_file)
+    
+    # 3. 发送邮件（含附件与文本）
+    send_email("【PerfPulse】每日硬件、系统与 LLM 性能简报", md_content, audio_script, mp3_file)
