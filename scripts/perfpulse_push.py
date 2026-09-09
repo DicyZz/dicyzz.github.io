@@ -2,7 +2,6 @@ import os
 import sys
 import re
 import time
-import asyncio
 import smtplib
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -12,7 +11,6 @@ import requests
 import feedparser
 import markdown
 from premailer import transform
-import edge_tts
 from openai import OpenAI
 
 # ---------------------------------------------------------------------------
@@ -31,7 +29,7 @@ EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")
 
 # ---------------------------------------------------------------------------
-# 1. 各模块 Top 顶级数据源全量配置 (新增 Chips and Cheese, LLVM Weekly, Releases 等)
+# 1. 各模块 Top 顶级数据源全量配置
 # ---------------------------------------------------------------------------
 MODULE_FEEDS = {
     # === 模块一：LLM 系统与推理/训练加速 ===
@@ -113,7 +111,7 @@ def is_recent_entry(entry, max_hours=48):
     """检查文章是否在最近 max_hours 小时内发布"""
     published_struct = entry.get("published_parsed") or entry.get("updated_parsed")
     if not published_struct:
-        return True  # 若源未提供明确时间，默认保留供 DeepSeek 校验
+        return True
     try:
         pub_time = datetime.fromtimestamp(time.mktime(published_struct), tz=timezone.utc)
         now_time = datetime.now(timezone.utc)
@@ -129,7 +127,6 @@ def fetch_single_feed(source_name, feed_url, category, max_items=2):
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) PerfPulseBot/1.0'}
     
     try:
-        # 使用 requests 加载并设置 8 秒硬超时，防止网络阻塞
         resp = requests.get(feed_url, headers=headers, timeout=8)
         if resp.status_code != 200:
             return []
@@ -142,7 +139,6 @@ def fetch_single_feed(source_name, feed_url, category, max_items=2):
             if count >= max_items:
                 break
             
-            # 时间过滤：跳过 48 小时之前的旧资讯
             if not is_recent_entry(entry, max_hours=48):
                 continue
 
@@ -160,7 +156,6 @@ def fetch_single_feed(source_name, feed_url, category, max_items=2):
                 count += 1
         return fetched_items
     except Exception:
-        # 静默捕获抓取超时或网络错误，保障整体流水线顺畅
         return []
 
 def fetch_all_feeds():
@@ -189,12 +184,12 @@ def fetch_all_feeds():
 
 
 # ---------------------------------------------------------------------------
-# 2. DeepSeek 生成文字简报与音频朗读脚本
+# 2. DeepSeek 生成文字简报与微信音频朗读文本
 # ---------------------------------------------------------------------------
 def generate_briefing_and_audio_script():
     real_news_context = fetch_all_feeds()
 
-    print("2. 正在通过 DeepSeek 提炼专业技术简报与播客脚本...")
+    print("2. 正在通过 DeepSeek 提炼专业技术简报与微信播客脚本...")
     if not DEEPSEEK_API_KEY:
         print("❌ 错误：未配置 DEEPSEEK_API_KEY！")
         sys.exit(1)
@@ -290,7 +285,7 @@ def generate_briefing_and_audio_script():
             md_content = md_content[:-3]
 
         audio_script_prompt = f"""
-请将以下技术简报转换为一段适合 2-3 分钟口语化播客朗读的文本脚本。
+请将以下技术简报转换为一段适合微信公众号“文字转语音”或者公众号朗读文本的口语化脚本。
 
 要求：
 1. 语言通俗自然，去除所有 Markdown 格式符号（如 `#`、`*`、`[链接]` 等）。
@@ -312,7 +307,7 @@ def generate_briefing_and_audio_script():
         )
         audio_script = audio_response.choices[0].message.content.strip()
 
-        print("✅ 多源简报文字与播客脚本生成成功！")
+        print("✅ 多源简报文字与公众号音频文本生成成功！")
         return md_content.strip(), audio_script
     except Exception as e:
         print(f"❌ DeepSeek 生成失败: {str(e)}")
@@ -320,24 +315,10 @@ def generate_briefing_and_audio_script():
 
 
 # ---------------------------------------------------------------------------
-# 3. Edge-TTS 异步音频合成
+# 3. 邮件渲染与发送 (已移除 MP3 附件逻辑)
 # ---------------------------------------------------------------------------
-async def generate_audio_async(text, output_mp3_path="perf_pulse_podcast.mp3"):
-    print(f"3. 正在合成播客 MP3 音频文件 ({output_mp3_path})...")
-    voice = "zh-CN-YunxiNeural"
-    communicate = edge_tts.Communicate(text, voice)
-    await communicate.save(output_mp3_path)
-    print("✅ MP3 音频文件合成完成！")
-
-def create_podcast_audio(script_text, output_file="perf_pulse_podcast.mp3"):
-    asyncio.run(generate_audio_async(script_text, output_file))
-
-
-# ---------------------------------------------------------------------------
-# 4. 邮件渲染与发送
-# ---------------------------------------------------------------------------
-def send_email(subject, md_content, audio_script, mp3_path="perf_pulse_podcast.mp3"):
-    print("4. 正在渲染适配邮件样式的 HTML 正文...")
+def send_email(subject, md_content, audio_script):
+    print("3. 正在渲染适配邮件样式的 HTML 正文...")
 
     sender = EMAIL_SENDER.strip() if EMAIL_SENDER else ""
     receiver = EMAIL_RECEIVER.strip() if EMAIL_RECEIVER else sender
@@ -352,17 +333,6 @@ def send_email(subject, md_content, audio_script, mp3_path="perf_pulse_podcast.m
     )
 
     today_date = datetime.now().strftime("%Y-%m-%d")
-
-    audio_header_html = f"""
-    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #6366f1; padding: 16px; border-radius: 6px; margin-bottom: 24px;">
-      <div style="font-weight: bold; font-size: 15px; color: #0f172a; margin-bottom: 8px;">
-        🎧 PerfPulse 3分钟音频架构解读
-      </div>
-      <div style="font-size: 13px; color: #475569; line-height: 1.6; margin-bottom: 10px;">
-        {audio_script[:120]}...
-      </div>
-    </div>
-    """
 
     styled_html = f"""
 <!DOCTYPE html>
@@ -394,6 +364,25 @@ def send_email(subject, md_content, audio_script, mp3_path="perf_pulse_podcast.m
     .header h1 {{ margin: 0; font-size: 20px; font-weight: 700; color: #ffffff; }}
     .header .subtitle {{ margin-top: 10px; font-size: 12px; color: #a5b4fc; }}
     .content {{ padding: 16px 12px; font-size: 15px; line-height: 1.75; color: #334155; }}
+    .audio-script-box {{
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-left: 4px solid #6366f1;
+      padding: 16px;
+      border-radius: 6px;
+      margin-bottom: 24px;
+    }}
+    .audio-script-title {{
+      font-weight: bold;
+      font-size: 15px;
+      color: #0f172a;
+      margin-bottom: 8px;
+    }}
+    .audio-script-text {{
+      font-size: 13px;
+      color: #475569;
+      line-height: 1.6;
+    }}
     h2 {{
       color: #0f172a;
       font-size: 17px;
@@ -429,7 +418,10 @@ def send_email(subject, md_content, audio_script, mp3_path="perf_pulse_podcast.m
       <div class="subtitle">发布日期：{today_date} | 真实硬件、LLM 加速与 Linux Kernel 严谨跟踪</div>
     </div>
     <div class="content">
-      {audio_header_html}
+      <div class="audio-script-box">
+        <div class="audio-script-title">🎙️ 今日公众号语音脚本（可直接复制使用）</div>
+        <div class="audio-script-text">{audio_script}</div>
+      </div>
       {raw_html}
     </div>
     <div class="footer">
@@ -440,7 +432,7 @@ def send_email(subject, md_content, audio_script, mp3_path="perf_pulse_podcast.m
 </html>
 """
 
-    print("5. 正在进行 CSS 内联化转换并发送邮件...")
+    print("4. 正在进行 CSS 内联化转换并发送邮件...")
     inlined_html = transform(styled_html)
 
     message = MIMEMultipart()
@@ -449,18 +441,6 @@ def send_email(subject, md_content, audio_script, mp3_path="perf_pulse_podcast.m
     message["Subject"] = f"{subject} ({today_date})"
 
     message.attach(MIMEText(inlined_html, "html", "utf-8"))
-
-    if os.path.exists(mp3_path):
-        try:
-            with open(mp3_path, "rb") as f:
-                audio_data = f.read()
-            audio_attachment = MIMEText(audio_data, "base64", "utf-8")
-            audio_attachment["Content-Type"] = "audio/mpeg"
-            audio_attachment["Content-Disposition"] = f'attachment; filename="{os.path.basename(mp3_path)}"'
-            message.attach(audio_attachment)
-            print("✅ 已成功添加 MP3 音频为邮件附件！")
-        except Exception as e:
-            print(f"⚠️ 添加音频附件失败: {e}")
 
     try:
         if EMAIL_PORT == 465:
@@ -472,7 +452,7 @@ def send_email(subject, md_content, audio_script, mp3_path="perf_pulse_podcast.m
         server.login(sender, EMAIL_PASSWORD.strip())
         server.sendmail(sender, [receiver], message.as_string())
         server.quit()
-        print("🎉 简报正文与 MP3 播客附件已成功发送！")
+        print("🎉 简报正文及公众号语音脚本已成功发送至邮箱！")
     except Exception as e:
         print(f"❌ 邮件发送失败: {str(e)}")
         sys.exit(1)
@@ -483,6 +463,4 @@ def send_email(subject, md_content, audio_script, mp3_path="perf_pulse_podcast.m
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     md_content, audio_script = generate_briefing_and_audio_script()
-    mp3_file = "perf_pulse_podcast.mp3"
-    create_podcast_audio(audio_script, mp3_file)
-    send_email("【PerfPulse】每日硬件、微架构与 LLM 性能简报", md_content, audio_script, mp3_file)
+    send_email("【PerfPulse】每日硬件、微架构与 LLM 性能简报", md_content, audio_script)
