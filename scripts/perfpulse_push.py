@@ -70,6 +70,8 @@ MODULE_FEEDS = {
         "The Chip Letter (Substack)": "https://thechipletter.substack.com/feed",
         "Lobsters (performance)": "https://lobste.rs/t/performance.rss",
         "Lobsters (compilers)": "https://lobste.rs/t/compilers.rss",
+        "Glenn Klockwood (HPC/storage)": "https://blog.glennklockwood.com/feeds/posts/default",
+        "Scientific Computing in Rust": "https://scientificcomputing.rs/monthly/rss.xml",
         "Cloudflare Tech Blog": "https://blog.cloudflare.com/rss/",
         "Netflix Tech Blog": "https://netflixtechblog.com/feed",
         "Hugging Face Blog": "https://huggingface.co/blog/feed.xml",
@@ -96,6 +98,8 @@ MODULE_FEEDS = {
     "Other_Materials": {
         "vLLM GitHub Releases": "https://github.com/vllm-project/vllm/releases.atom",
         "TensorRT-LLM GitHub Releases": "https://github.com/NVIDIA/TensorRT-LLM/releases.atom",
+        "llama.cpp GitHub Releases": "https://github.com/ggml-org/llama.cpp/releases.atom",
+        "NVIDIA TensorRT Releases": "https://github.com/NVIDIA/TensorRT/releases.atom",
         "Hacker News Systems Tech": "https://news.ycombinator.com/rss",
     }
 }
