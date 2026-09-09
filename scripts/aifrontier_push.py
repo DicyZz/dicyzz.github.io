@@ -32,6 +32,14 @@ EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")
 # ---------------------------------------------------------------------------
 # 1. 各模块 Top 顶级数据源全量配置（按简报四板块组织）
 # ---------------------------------------------------------------------------
+# 各板块每源抓取上限（差异化，平衡四板块）
+CATEGORY_MAX_ITEMS = {
+    "News": 6,
+    "Blog_Posts": 12,
+    "Research_Papers": 5,
+    "Other_Materials": 12,
+}
+
 MODULE_FEEDS = {
     # === 新闻与发布 ===
     "News": {
@@ -49,7 +57,8 @@ MODULE_FEEDS = {
         "The Gradient": "https://thegradient.pub/rss/",
         "Import AI (Jack Clark)": "https://jack-clark.net/feed/",
         "Hacker News AI": "https://hnrss.org/newest?q=LLM+OR+agent+OR+multimodal",
-        "Bair (Berkeley AI)": "https://bair.berkeley.edu/blog/feed.xml",
+        "Simon Willison": "https://simonwillison.net/atom/everything/",
+        "Eugene Yan": "https://eugeneyan.com/rss/",
     },
 
     # === 论文 ===
@@ -65,6 +74,10 @@ MODULE_FEEDS = {
         "Hugging Face Transformers Releases": "https://github.com/huggingface/transformers/releases.atom",
         "PyTorch GitHub Releases": "https://github.com/pytorch/pytorch/releases.atom",
         "llama.cpp GitHub Releases": "https://github.com/ggml-org/llama.cpp/releases.atom",
+        "vLLM GitHub Releases": "https://github.com/vllm-project/vllm/releases.atom",
+        "SGLang GitHub Releases": "https://github.com/sgl-project/sglang/releases.atom",
+        "Ollama GitHub Releases": "https://github.com/ollama/ollama/releases.atom",
+        "LangChain GitHub Releases": "https://github.com/langchain-ai/langchain/releases.atom",
     }
 }
 
@@ -137,8 +150,9 @@ def fetch_all_feeds():
     with ThreadPoolExecutor(max_workers=25) as executor:
         future_to_source = {}
         for category, feeds in MODULE_FEEDS.items():
+            max_items = CATEGORY_MAX_ITEMS.get(category, 6)
             for source_name, feed_url in feeds.items():
-                future = executor.submit(fetch_single_feed, source_name, feed_url, category, max_items=6)
+                future = executor.submit(fetch_single_feed, source_name, feed_url, category, max_items=max_items)
                 future_to_source[future] = source_name
 
         for future in as_completed(future_to_source):
