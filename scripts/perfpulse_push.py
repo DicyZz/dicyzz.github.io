@@ -361,9 +361,6 @@ def send_email(subject, md_content, audio_script, mp3_path="perf_pulse_podcast.m
       <div style="font-size: 13px; color: #475569; line-height: 1.6; margin-bottom: 10px;">
         {audio_script[:120]}...
       </div>
-      <div style="font-size: 12px; color: #6366f1; font-weight: 500;">
-        💡 提示：今日音频文件（{mp3_path}）已自动合成并作为邮件附件随信附带。
-      </div>
     </div>
     """
 
