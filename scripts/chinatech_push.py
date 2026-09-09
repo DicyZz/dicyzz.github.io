@@ -35,7 +35,7 @@ EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")
 # 国内科技公司动态：统一抓取科技媒体，由模型按公司领域归类输出
 # 每源抓取上限（控制输入规模）
 CATEGORY_MAX_ITEMS = {
-    "Tech_News": 6,
+    "Tech_News": 3,
 }
 
 MODULE_FEEDS = {
@@ -47,6 +47,12 @@ MODULE_FEEDS = {
         "钛媒体": "https://www.tmtpost.com/rss.xml",
         "量子位": "https://www.qbitai.com/feed",
         "雷峰网": "https://www.leiphone.com/feed",
+        "速途网": "https://www.sootoo.com/rss",
+        "IT经理网": "https://www.ctocio.com/rss",
+        "Solidot": "https://www.solidot.org/index.rss",
+        "少数派": "https://sspai.com/feed",
+        "OSCHINA": "https://www.oschina.net/news/rss",
+        "InfoQ 中文": "https://www.infoq.cn/feed",
     },
 }
 
