@@ -1,14 +1,14 @@
-name: Job Requirement Analysis Daily Run
+name: PerfPulse Weekly Briefing Automation
 
 on:
   schedule:
-    # 每天 UTC 时间 0:00 (北京时间 8:00) 自动运行
-    - cron: '0 0 * * *'
-  # 支持在 GitHub 页面手动点击触发
+    # 每周一 UTC 时间 0:00 (北京时间 周一 08:00) 自动触发
+    - cron: '0 0 * * 1'
+  # 支持在 GitHub Actions 页面手动点击 Run workflow 触发
   workflow_dispatch:
 
 jobs:
-  analyze-jobs:
+  run-briefing:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,15 +23,16 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install openai
+          pip install requests feedparser markdown premailer openai
 
-      - name: Run Job Analysis Script
+      - name: Run PerfPulse Script
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-          SENDER_PASS: ${{ secrets.SENDER_PASS }}
-          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+          DEEPSEEK_MODEL: ${{ secrets.DEEPSEEK_MODEL }}
+          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
         run: |
           python scripts/perfpulse_job_analysis.py
