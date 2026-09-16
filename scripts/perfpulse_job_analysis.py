@@ -6,18 +6,18 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from openai import OpenAI
 
-# ==================== 1. 配置项 (读取环境变量 + 空值容错兜底) ====================
+# ==================== 1. 配置项 (默认适配 Gmail SMTP) ====================
 TARGET_CITY = os.getenv("TARGET_CITY") or "北京"
 TARGET_JOB = os.getenv("TARGET_JOB") or "ESL建模工程师"
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 
-# 使用 or 运算符，当环境变量为空字符串 "" 或未设置时，会自动采用右侧默认值
-SMTP_SERVER = os.getenv("SMTP_SERVER") or "smtp.qq.com"
+# 默认适配 Gmail 的 SMTP 配置
+SMTP_SERVER = os.getenv("SMTP_SERVER") or "smtp.gmail.com"
 SMTP_PORT = int(os.getenv("SMTP_PORT") or 465)
 
 SENDER_EMAIL = os.getenv("SENDER_EMAIL") or ""
-SENDER_PASS = os.getenv("SENDER_PASS") or ""
+SENDER_PASS = os.getenv("SENDER_PASS") or ""  # 填入 Gmail 生成的 16 位 App Password
 RECEIVER_EMAIL = os.getenv("RECEIVER_EMAIL") or SENDER_EMAIL
 
 # 初始化 OpenAI 客户端 (对接 DeepSeek API)
@@ -52,7 +52,7 @@ def fetch_raw_job_listings(city: str, keyword: str) -> list:
 
 # ==================== 3. DeepSeek 分析模块 ====================
 def analyze_job_requirements(job_list: list, city: str, keyword: str) -> str:
-    """调用 DeepSeek API 进行岗位要求归纳与分析，生成 HTML 格式文本"""
+    """调用 DeepSeek API 进行岗位要求归纳与分析，生成支持 HTML 展示的文本"""
     
     prompt = f"""
 你是一位专业的 IC 与软件技术猎头。请分析以下在【{city}】采集到的【{keyword}】相关岗位的原始招聘信息。
@@ -77,11 +77,14 @@ def analyze_job_requirements(job_list: list, city: str, keyword: str) -> str:
     )
     return response.choices[0].message.content
 
-# ==================== 4. 邮件推送模块 ====================
+# ==================== 4. 邮件推送模块 (Gmail SSL) ====================
 def send_email_report(html_content: str, city: str, keyword: str):
-    """通过 SMTP SSL 发送 HTML 格式分析报告"""
+    """通过 Gmail SMTP SSL 发送分析报告"""
     if not SENDER_EMAIL or not SENDER_PASS:
-        raise ValueError("缺少发件人邮箱配置！请在环境变量/GitHub Secrets 中检查 SENDER_EMAIL 与 SENDER_PASS。")
+        raise ValueError(
+            "缺少发件人配置！请确保在 GitHub Secrets 中已设置 SENDER_EMAIL "
+            "和 SENDER_PASS (Gmail 16 位应用密码)。"
+        )
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"【PerfPulse】{city}·{keyword} 岗位市场情报与要求提炼 ({datetime.now().strftime('%Y-%m-%d')})"
@@ -90,7 +93,7 @@ def send_email_report(html_content: str, city: str, keyword: str):
 
     msg.attach(MIMEText(html_content, "html", "utf-8"))
 
-    print(f"正在连接 SMTP 服务器 {SMTP_SERVER}:{SMTP_PORT} ...")
+    print(f"正在通过 Gmail SMTP ({SMTP_SERVER}:{SMTP_PORT}) 发送邮件，发件人: {SENDER_EMAIL}...")
     with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
         server.login(SENDER_EMAIL, SENDER_PASS)
         server.sendmail(SENDER_EMAIL, [RECEIVER_EMAIL], msg.as_string())
@@ -105,4 +108,4 @@ if __name__ == "__main__":
     
     print("正在发送分析报告邮件...")
     send_email_report(analysis_html, TARGET_CITY, TARGET_JOB)
-    print("全流程执行完成！")
+    print("分析与邮件推送顺利完成！")
