@@ -1,14 +1,12 @@
-name: PerfPulse Weekly Briefing Automation
+name: Job Requirement Analysis Daily Run
 
 on:
   schedule:
-    # 每周一 UTC 时间 0:00 (北京时间 周一 08:00) 自动触发
-    - cron: '0 0 * * 1'
-  # 支持在 GitHub Actions 页面手动点击 Run workflow 触发
-  workflow_dispatch:
+    - cron: '0 0 * * *'  # 每天 UTC 0:00 (北京时间 8:00)
+  workflow_dispatch:      # 支持手动触发
 
 jobs:
-  run-briefing:
+  analyze-jobs:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,16 +21,18 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests feedparser markdown premailer openai
+          pip install requests markdown premailer openai
 
-      - name: Run PerfPulse Script
+      - name: Run Job Analysis Script
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          DEEPSEEK_MODEL: ${{ secrets.DEEPSEEK_MODEL }}
           EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
           EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
+          # 👈 在此配置想要监控的指定城市与岗位
+          TARGET_CITY: "北京"
+          TARGET_JOB: "ESL建模工程师"
         run: |
           python scripts/perfpulse_job_analysis.py
