@@ -34,4 +34,4 @@ jobs:
           SENDER_PASS: ${{ secrets.SENDER_PASS }}
           RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
         run: |
-          python perfpulse_job_analysis.py
+          python scripts/perfpulse_job_analysis.py
