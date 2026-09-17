@@ -1,8 +1,8 @@
-name: PerfPulse Open Job Analysis Daily Run
+name: Job Requirement Analysis Daily Run
 
 on:
   schedule:
-    # 每天 UTC 0:00 (北京时间 8:00) 自动触发
+    # 每天 UTC 0:00 (北京时间 8:00) 自动运行
     - cron: '0 0 * * *'
   # 支持在 GitHub Actions 页面手动点击触发
   workflow_dispatch:
@@ -23,9 +23,12 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests feedparser markdown premailer openai
+          # 1. 明确写上 playwright 及其它依赖
+          pip install requests markdown premailer openai playwright feedparser
+          # 2. 安装 Playwright 所需的 Chromium 驱动
+          python -m playwright install chromium
 
-      - name: Run Open Job Analysis Script
+      - name: Run Job Analysis Script
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           DEEPSEEK_MODEL: ${{ secrets.DEEPSEEK_MODEL }}
