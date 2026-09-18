@@ -18,9 +18,12 @@
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
+import time
 
 try:
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -32,6 +35,22 @@ COOKIE_DB = os.path.expanduser(
     "~/Library/Application Support/Google/Chrome/Default/Cookies"
 )
 OUT_FILE = "data/boss_cookies.json"
+
+
+def quit_chrome():
+    """优雅退出 Chrome，使其把 WAL 日志落盘到 Cookies 数据库。"""
+    subprocess.run(["osascript", "-e", 'quit app "Google Chrome"'], check=False)
+    time.sleep(3)
+
+
+def copy_cookie_db() -> str:
+    """把 Cookies 及其 WAL 文件复制到临时目录，避免读取时被锁。"""
+    tmpdir = tempfile.mkdtemp(prefix="cookies_")
+    for suffix in ("", "-wal", "-journal", "-shm"):
+        src = COOKIE_DB + suffix
+        if os.path.exists(src):
+            shutil.copy2(src, os.path.join(tmpdir, "Cookies" + suffix))
+    return os.path.join(tmpdir, "Cookies")
 
 
 def get_safe_storage_key() -> bytes:
@@ -65,9 +84,13 @@ def decrypt_v10(safe_key: bytes, encrypted_value: bytes) -> str:
 
 
 def main():
+    print("正在退出 Chrome（保证 Cookie 已落盘）...")
+    quit_chrome()
+
     safe_key = get_safe_storage_key()
 
-    conn = sqlite3.connect(f"file:{COOKIE_DB}?mode=ro&immutable=1", uri=True)
+    db_copy = copy_cookie_db()
+    conn = sqlite3.connect(db_copy)
     rows = conn.execute(
         """
         SELECT host_key, name, path, is_secure, is_httponly, expires_utc, encrypted_value
