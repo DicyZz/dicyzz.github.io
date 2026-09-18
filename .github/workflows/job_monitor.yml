@@ -4,8 +4,17 @@ on:
   schedule:
     # 每天 UTC 0:00 (北京时间 8:00) 自动运行
     - cron: '0 0 * * *'
-  # 支持在 GitHub Actions 页面手动点击触发
+  # 支持在 GitHub Actions 页面手动点击触发，可输入目标城市与岗位
   workflow_dispatch:
+    inputs:
+      target_city:
+        description: '目标城市（如：北京、上海、深圳、杭州、广州）'
+        required: false
+        default: '北京'
+      target_job:
+        description: '目标岗位关键词（如：ESL建模工程师、后端开发工程师）'
+        required: false
+        default: 'ESL建模工程师'
 
 jobs:
   analyze-jobs:
@@ -37,7 +46,19 @@ jobs:
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
-          TARGET_CITY: "北京"
-          TARGET_JOB: "ESL建模工程师"
+          BOSS_COOKIES: ${{ secrets.BOSS_COOKIES }}
+          MAX_JOBS: '30'
+          TARGET_CITY: ${{ github.event.inputs.target_city || '北京' }}
+          TARGET_JOB: ${{ github.event.inputs.target_job || 'ESL建模工程师' }}
         run: |
           python scripts/perfpulse_job_analysis.py
+
+      - name: Upload Job Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: job-results
+          path: |
+            jobs_result.json
+            jobs_result.md
+          if-no-files-found: ignore
