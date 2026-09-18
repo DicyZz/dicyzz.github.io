@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""实时抓取指定城市/岗位的招聘信息。
+"""实时抓取指定城市/岗位的招聘信息，支持多数据源。
 
-数据源：牛客网（nowcoder.com）
-- 覆盖校招 / 社招 / 实习
-- 无需登录、无验证码，海内外网络均可访问
-- 搜索结果由服务端直接渲染，requests 即可稳定抓取
+数据源：
+1. 牛客网（nowcoder.com）：无需登录、无验证码，requests 直接抓取，
+   覆盖校招 / 社招 / 实习，海内外网络均可访问。
+2. 猎聘（liepin.com）：数据量大、偏社招，使用 Playwright 无头浏览器
+   绕过阿里云 WAF（acw_tc 校验）后抓取其搜索接口返回的 JSON。
 
 用法：
     TARGET_CITY=北京 TARGET_JOB=芯片设计 python scripts/perfpulse_job_analysis.py
@@ -15,7 +16,10 @@
 import os
 import json
 import re
+import random
 import smtplib
+import string
+import time
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -44,7 +48,7 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
-# 用于从岗位信息中识别城市字段
+# 用于从牛客网岗位信息中识别城市字段
 CITIES = [
     "北京", "上海", "深圳", "广州", "杭州", "成都", "武汉", "南京",
     "西安", "苏州", "天津", "重庆", "长沙", "郑州", "青岛", "济南",
@@ -59,8 +63,24 @@ NOISE_ITEMS = {
     "简历直投官网", "发展前景广阔", "有转正", "学历友好榜", "高新技术",
 }
 
+# 猎聘城市代码（dq），"410" 为全国
+LIEPIN_CITY_CODE = {
+    "北京": "010", "上海": "020", "天津": "030", "重庆": "040",
+    "深圳": "050090", "广州": "050020", "杭州": "070020", "成都": "280020",
+    "武汉": "170020", "南京": "060020", "西安": "270020", "苏州": "060080",
+    "长沙": "180020", "郑州": "150020", "青岛": "250070", "济南": "250020",
+    "大连": "210040", "沈阳": "210020", "合肥": "080020", "厦门": "090040",
+    "福州": "090020", "东莞": "050040", "佛山": "050050", "珠海": "050140",
+    "宁波": "070030", "无锡": "060100", "昆明": "310020", "哈尔滨": "160020",
+    "石家庄": "140020", "贵阳": "120020", "南宁": "110020", "南昌": "200020",
+    "太原": "260020", "兰州": "100020", "乌鲁木齐": "300020", "海口": "130020",
+    "常州": "060040", "温州": "070040", "嘉兴": "070090", "绍兴": "070050",
+    "泉州": "090030", "惠州": "050060", "中山": "050130",
+}
+LIEPIN_NATIONWIDE = "410"
 
-# ==================== 2. 牛客网抓取 ====================
+
+# ==================== 2. 牛客网抓取（requests） ====================
 def _clean(text: str) -> str:
     text = re.sub(r"<[^>]+>", "", text or "")
     text = (
@@ -68,8 +88,6 @@ def _clean(text: str) -> str:
         .replace("&nbsp;", " ")
         .replace("&lt;", "<")
         .replace("&gt;", ">")
-        .replace("&#xeb52", "千")
-        .replace("&#xea0a", "人")
     )
     return text.strip()
 
@@ -96,7 +114,6 @@ def _parse_nowcoder(html: str) -> list:
         comp_items = re.findall(r'class="company-info-item"[^>]*>(.*?)</div>', card, re.S)
 
         title = _clean(job_name.group(1)) if job_name else ""
-        # 拆分类型前缀：校招 / 社招 / 实习
         jtype, jtitle = "社招", title
         for t in ("校招", "社招", "实习"):
             if t in title:
@@ -132,31 +149,128 @@ def _parse_nowcoder(html: str) -> list:
 
 
 def fetch_nowcoder_jobs(keyword: str, city: str) -> list:
-    """抓取牛客网指定关键词的岗位，并按城市过滤（客户端过滤）。"""
-    url = (
-        "https://www.nowcoder.com/search/job"
-        f"?query={quote(keyword)}&type=job"
-    )
-    print(f"🌐 正在抓取牛客网 [{keyword}] 岗位...")
-    try:
-        resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=30)
-        resp.raise_for_status()
-    except Exception as e:
-        print(f"⚠️ 牛客网请求失败: {e}")
-        return []
+    url = "https://www.nowcoder.com/search/job" + f"?query={quote(keyword)}&type=job"
+    print(f"🌐 [牛客网] 正在抓取 [{keyword}] 岗位...")
+    jobs = []
+    for attempt in range(3):
+        try:
+            resp = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=30)
+            resp.raise_for_status()
+            # 牛客网偶发返回短小的风控/加载页，检测到就重试
+            if 'job-card-item job-card' not in resp.text:
+                print(f"   第 {attempt + 1} 次返回拦截页（长度 {len(resp.text)}），重试...")
+                time.sleep(2)
+                continue
+            jobs = _parse_nowcoder(resp.text)
+            break
+        except Exception as e:
+            print(f"⚠️ 牛客网第 {attempt + 1} 次请求失败: {e}")
+            time.sleep(2)
 
-    jobs = _parse_nowcoder(resp.text)
-    print(f"🔍 原始检索到 {len(jobs)} 条岗位")
+    print(f"🔍 [牛客网] 原始检索到 {len(jobs)} 条岗位")
 
-    # 城市过滤（"全国" 或空则不筛）
     if city and city != "全国":
         jobs = [j for j in jobs if j["city"] == city]
-        print(f"📍 按城市 [{city}] 过滤后剩余 {len(jobs)} 条")
+        print(f"📍 [牛客网] 按城市 [{city}] 过滤后剩余 {len(jobs)} 条")
 
     return jobs
 
 
-# ==================== 3. 结果落盘与 Actions 摘要 ====================
+# ==================== 3. 猎聘抓取（Playwright） ====================
+def fetch_liepin_jobs(keyword: str, city: str) -> list:
+    """使用 Playwright 抓取猎聘，返回结构化的岗位列表。"""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("⚠️ [猎聘] 未安装 playwright，跳过该数据源")
+        return []
+
+    city_code = LIEPIN_CITY_CODE.get(city, LIEPIN_NATIONWIDE if city in ("", "全国") else LIEPIN_NATIONWIDE)
+    # 未收录城市时回退到全国，避免报错
+    if city not in LIEPIN_CITY_CODE and city not in ("", "全国"):
+        print(f"⚠️ [猎聘] 未收录城市 [{city}]，按全国范围搜索")
+        city_code = LIEPIN_NATIONWIDE
+
+    url = f"https://www.liepin.com/zhaopin/?key={quote(keyword)}&dq={city_code}"
+    print(f"🌐 [猎聘] 正在抓取 [{keyword}] 岗位（dq={city_code}）...")
+
+    captured = []
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent=USER_AGENT,
+                viewport={"width": 1280, "height": 800},
+                locale="zh-CN",
+            )
+            page = context.new_page()
+
+            def on_response(resp):
+                if "pc-search-job" in resp.url and "cond-init" not in resp.url:
+                    try:
+                        captured.append(resp.text())
+                    except Exception:
+                        pass
+
+            page.on("response", on_response)
+            page.goto(url, timeout=60000, wait_until="load")
+            page.wait_for_timeout(8000)
+            browser.close()
+    except Exception as e:
+        print(f"⚠️ [猎聘] 页面加载或抓取失败: {e}")
+        return []
+
+    if not captured:
+        print("⚠️ [猎聘] 未捕获到搜索接口响应")
+        return []
+
+    try:
+        data = json.loads(captured[0])
+        cards = data.get("data", {}).get("data", {}).get("jobCardList", [])
+    except Exception as e:
+        print(f"⚠️ [猎聘] 响应解析失败: {e}")
+        return []
+
+    jobs = []
+    for c in cards:
+        j = c.get("job", {})
+        comp = c.get("comp", {})
+        jobs.append({
+            "source": "猎聘",
+            "type": "社招",
+            "title": j.get("title", ""),
+            "salary": j.get("salary", ""),
+            "city": j.get("dq", city),
+            "company": comp.get("compName", ""),
+            "industry": comp.get("compIndustry", ""),
+            "scale": comp.get("compScale", ""),
+            "info": " / ".join(x for x in [
+                j.get("requireWorkYears", ""),
+                j.get("requireEduLevel", ""),
+            ] if x),
+            "url": j.get("link", ""),
+        })
+
+    print(f"🔍 [猎聘] 检索到 {len(jobs)} 条岗位")
+    return jobs
+
+
+# ==================== 4. 结果去重 ====================
+def dedupe_jobs(jobs: list) -> list:
+    seen = set()
+    result = []
+    for job in jobs:
+        # 优先用详情链接去重，链接缺失时退回到 公司+岗位
+        key = job.get("url") or (job.get("company", ""), job.get("title", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(job)
+    return result
+
+
+# ==================== 5. 结果落盘与 Actions 摘要 ====================
 def save_results(jobs: list):
     with open("jobs_result.json", "w", encoding="utf-8") as f:
         json.dump(jobs, f, ensure_ascii=False, indent=2)
@@ -198,7 +312,7 @@ def save_results(jobs: list):
     print("💾 结果已保存到 jobs_result.json / jobs_result.md")
 
 
-# ==================== 4. DeepSeek 分析 + 邮件（可选） ====================
+# ==================== 6. DeepSeek 分析 + 邮件（可选） ====================
 def analyze_and_send(jobs: list):
     if not jobs:
         print("ℹ️ 无岗位数据，跳过分析")
@@ -250,6 +364,11 @@ def analyze_and_send(jobs: list):
 
 
 if __name__ == "__main__":
-    job_list = fetch_nowcoder_jobs(TARGET_JOB, TARGET_CITY)
-    save_results(job_list)
-    analyze_and_send(job_list)
+    all_jobs = []
+    all_jobs.extend(fetch_nowcoder_jobs(TARGET_JOB, TARGET_CITY))
+    all_jobs.extend(fetch_liepin_jobs(TARGET_JOB, TARGET_CITY))
+
+    all_jobs = dedupe_jobs(all_jobs)
+    print(f"\n📊 合计去重后 {len(all_jobs)} 条岗位")
+    save_results(all_jobs)
+    analyze_and_send(all_jobs)

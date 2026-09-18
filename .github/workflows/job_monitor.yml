@@ -32,7 +32,8 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests markdown premailer openai
+          pip install requests markdown premailer openai playwright
+          python -m playwright install chromium
 
       - name: Run Job Analysis Script
         env:
