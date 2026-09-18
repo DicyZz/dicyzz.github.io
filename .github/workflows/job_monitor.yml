@@ -19,6 +19,26 @@ on:
         description: '猎聘抓取页数（1-10，默认3，每页约40条）'
         required: false
         default: '3'
+      target_industry:
+        description: '目标行业（默认不限）'
+        required: false
+        default: '不限'
+        type: choice
+        options:
+          - '不限'
+          - '互联网/软件/IT'
+          - '半导体/电子/芯片'
+          - '人工智能'
+          - '金融'
+          - '医疗健康'
+          - '汽车/新能源'
+          - '教育/培训'
+          - '游戏'
+          - '制造业'
+          - '通信'
+          - '电商/零售/消费'
+          - '企业服务'
+          - '广告/营销/传媒'
 
 jobs:
   analyze-jobs:
@@ -50,6 +70,7 @@ jobs:
           EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
           TARGET_CITY: ${{ github.event.inputs.target_city || '全国' }}
           TARGET_JOB: ${{ github.event.inputs.target_job || '芯片设计' }}
+          TARGET_INDUSTRY: ${{ github.event.inputs.target_industry || '不限' }}
           MAX_PAGES: ${{ github.event.inputs.max_pages || '3' }}
         run: |
           python scripts/perfpulse_job_analysis.py
