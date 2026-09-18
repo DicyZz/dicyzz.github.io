@@ -100,6 +100,28 @@ def _extract_city(items: list) -> str:
     return ""
 
 
+def _is_related(title: str, keyword: str) -> bool:
+    """判断岗位标题是否与搜索关键词相关，用于过滤翻页产生的无关结果。"""
+    if not keyword or not title:
+        return True
+    title_l = title.lower()
+    kw = keyword.strip().lower()
+    if kw in title_l:
+        return True
+
+    # 中文关键词：用 2 字滑动窗口匹配（如「芯片设计」→「芯片」「设计」）
+    if any("\u4e00" <= ch <= "\u9fff" for ch in kw):
+        if len(kw) >= 2:
+            for i in range(len(kw) - 1):
+                if kw[i:i + 2] in title_l:
+                    return True
+        return False
+
+    # 英文/数字关键词：按分隔符拆分后匹配
+    parts = re.split(r"[\s+/\\]+", kw)
+    return any(p and p in title_l for p in parts)
+
+
 def _parse_nowcoder(html: str) -> list:
     """解析牛客网搜索结果页，提取岗位列表。"""
     jobs = []
@@ -177,13 +199,20 @@ def fetch_nowcoder_jobs(keyword: str, city: str) -> list:
 
 
 # ==================== 3. 猎聘抓取（Playwright） ====================
-def fetch_liepin_jobs(keyword: str, city: str) -> list:
-    """使用 Playwright 抓取猎聘，返回结构化的岗位列表。"""
+def fetch_liepin_jobs(keyword: str, city: str, max_pages: int = None) -> list:
+    """使用 Playwright 抓取猎聘，支持翻页，返回结构化的岗位列表。"""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         print("⚠️ [猎聘] 未安装 playwright，跳过该数据源")
         return []
+
+    if max_pages is None:
+        try:
+            max_pages = int(os.getenv("MAX_PAGES") or 3)
+        except ValueError:
+            max_pages = 3
+    max_pages = max(1, min(max_pages, 10))
 
     city_code = LIEPIN_CITY_CODE.get(city, LIEPIN_NATIONWIDE if city in ("", "全国") else LIEPIN_NATIONWIDE)
     # 未收录城市时回退到全国，避免报错
@@ -191,10 +220,10 @@ def fetch_liepin_jobs(keyword: str, city: str) -> list:
         print(f"⚠️ [猎聘] 未收录城市 [{city}]，按全国范围搜索")
         city_code = LIEPIN_NATIONWIDE
 
-    url = f"https://www.liepin.com/zhaopin/?key={quote(keyword)}&dq={city_code}"
-    print(f"🌐 [猎聘] 正在抓取 [{keyword}] 岗位（dq={city_code}）...")
+    base_url = f"https://www.liepin.com/zhaopin/?key={quote(keyword)}&dq={city_code}"
+    print(f"🌐 [猎聘] 正在抓取 [{keyword}] 岗位（dq={city_code}，最多 {max_pages} 页）...")
 
-    captured = []
+    jobs = []
 
     try:
         with sync_playwright() as p:
@@ -206,51 +235,60 @@ def fetch_liepin_jobs(keyword: str, city: str) -> list:
             )
             page = context.new_page()
 
-            def on_response(resp):
-                if "pc-search-job" in resp.url and "cond-init" not in resp.url:
-                    try:
-                        captured.append(resp.text())
-                    except Exception:
-                        pass
+            # 首次访问建立 WAF Cookie
+            page.goto(base_url, timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
 
-            page.on("response", on_response)
-            page.goto(url, timeout=60000, wait_until="load")
-            page.wait_for_timeout(8000)
+            for cur_page in range(max_pages):
+                url = base_url + f"&currentPage={cur_page}"
+                try:
+                    with page.expect_response(
+                        lambda resp: "pc-search-job" in resp.url and "cond-init" not in resp.url,
+                        timeout=30000,
+                    ) as resp_info:
+                        page.goto(url, timeout=60000, wait_until="domcontentloaded")
+                    data = json.loads(resp_info.value.text())
+                    cards = data.get("data", {}).get("data", {}).get("jobCardList", [])
+                except Exception as e:
+                    if cur_page == 0:
+                        print(f"⚠️ [猎聘] 第 {cur_page + 1} 页抓取失败: {e}")
+                    break
+
+                if not cards:
+                    if cur_page == 0:
+                        print("⚠️ [猎聘] 未检索到岗位")
+                    break
+
+                for c in cards:
+                    j = c.get("job", {})
+                    comp = c.get("comp", {})
+                    title = j.get("title", "")
+                    # 翻页会放宽关键词，过滤掉明显不相关的岗位
+                    if not _is_related(title, keyword):
+                        continue
+                    jobs.append({
+                        "source": "猎聘",
+                        "type": "社招",
+                        "title": title,
+                        "salary": j.get("salary", ""),
+                        "city": j.get("dq", city),
+                        "company": comp.get("compName", ""),
+                        "industry": comp.get("compIndustry", ""),
+                        "scale": comp.get("compScale", ""),
+                        "info": " / ".join(x for x in [
+                            j.get("requireWorkYears", ""),
+                            j.get("requireEduLevel", ""),
+                        ] if x),
+                        "url": j.get("link", ""),
+                    })
+
+                print(f"   第 {cur_page + 1} 页抓取 {len(cards)} 条")
+                page.wait_for_timeout(500)
+
             browser.close()
     except Exception as e:
         print(f"⚠️ [猎聘] 页面加载或抓取失败: {e}")
         return []
-
-    if not captured:
-        print("⚠️ [猎聘] 未捕获到搜索接口响应")
-        return []
-
-    try:
-        data = json.loads(captured[0])
-        cards = data.get("data", {}).get("data", {}).get("jobCardList", [])
-    except Exception as e:
-        print(f"⚠️ [猎聘] 响应解析失败: {e}")
-        return []
-
-    jobs = []
-    for c in cards:
-        j = c.get("job", {})
-        comp = c.get("comp", {})
-        jobs.append({
-            "source": "猎聘",
-            "type": "社招",
-            "title": j.get("title", ""),
-            "salary": j.get("salary", ""),
-            "city": j.get("dq", city),
-            "company": comp.get("compName", ""),
-            "industry": comp.get("compIndustry", ""),
-            "scale": comp.get("compScale", ""),
-            "info": " / ".join(x for x in [
-                j.get("requireWorkYears", ""),
-                j.get("requireEduLevel", ""),
-            ] if x),
-            "url": j.get("link", ""),
-        })
 
     print(f"🔍 [猎聘] 检索到 {len(jobs)} 条岗位")
     return jobs
