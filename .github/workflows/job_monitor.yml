@@ -1,4 +1,4 @@
-name: Job Requirement Analysis Daily Run
+name: Job Monitor - 招聘信息实时抓取
 
 on:
   schedule:
@@ -8,13 +8,13 @@ on:
   workflow_dispatch:
     inputs:
       target_city:
-        description: '目标城市（如：北京、上海、深圳、杭州、广州）'
+        description: '目标城市（如：北京、上海、深圳、杭州、广州；填「全国」则不筛选）'
         required: false
-        default: '北京'
+        default: '全国'
       target_job:
-        description: '目标岗位关键词（如：ESL建模工程师、后端开发工程师）'
+        description: '目标岗位关键词（如：芯片设计、算法工程师、C++）'
         required: false
-        default: 'ESL建模工程师'
+        default: '芯片设计'
 
 jobs:
   analyze-jobs:
@@ -32,10 +32,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          # 1. 明确写上 playwright 及其它依赖
-          pip install requests markdown premailer openai playwright feedparser
-          # 2. 安装 Playwright 所需的 Chromium 驱动
-          python -m playwright install chromium
+          pip install requests markdown premailer openai
 
       - name: Run Job Analysis Script
         env:
@@ -46,10 +43,8 @@ jobs:
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
-          BOSS_COOKIES: ${{ secrets.BOSS_COOKIES }}
-          MAX_JOBS: '30'
-          TARGET_CITY: ${{ github.event.inputs.target_city || '北京' }}
-          TARGET_JOB: ${{ github.event.inputs.target_job || 'ESL建模工程师' }}
+          TARGET_CITY: ${{ github.event.inputs.target_city || '全国' }}
+          TARGET_JOB: ${{ github.event.inputs.target_job || '芯片设计' }}
         run: |
           python scripts/perfpulse_job_analysis.py
 
