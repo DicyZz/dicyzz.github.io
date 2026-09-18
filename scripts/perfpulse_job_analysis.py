@@ -51,7 +51,16 @@ USER_AGENT = (
 INDUSTRY_OPTIONS = {
     "不限": [],
     "互联网/软件/IT": ["互联网", "软件", "it", "科技", "网络", "云计算", "大数据", "信息", "计算机", "software", "internet", "web", "saas", "tech", "technology"],
-    "半导体/电子/芯片": ["半导体", "集成电路", "芯片", "微电子", "电子", "ic", "硬件", "semiconductor", "chip", "electronics", "hardware"],
+    "半导体/电子/芯片": [
+        # 中文：industry 字段与标题通用
+        "半导体", "集成电路", "芯片", "微电子", "电子", "硬件",
+        "晶圆", "封测", "处理器", "算力", "版图", "流片",
+        "芯片设计", "ic设计", "数字ic", "模拟ic", "ic验证", "芯片架构",
+        # 英文精确词（词边界匹配，避免误命中）
+        "semiconductor", "chip", "electronics", "hardware", "silicon",
+        "vlsi", "verilog", "systemc", "fpga", "asic", "soc", "rtl", "esl",
+        "cpu", "gpu", "npu", "dsp", "mcu", "ic",
+    ],
     "人工智能": ["人工智能", "ai", "机器学习", "深度学习", "大模型", "artificial intelligence", "machine learning", "llm", "agent"],
     "金融": ["金融", "银行", "证券", "保险", "基金", "投资", "支付", "finance", "banking", "insurance", "fintech"],
     "医疗健康": ["医疗", "医药", "健康", "医院", "生物", "制药", "healthcare", "medical", "bio", "pharma", "biotech"],
@@ -203,10 +212,24 @@ def filter_by_industry(jobs: list, industry: str) -> list:
         return jobs
     result = []
     for job in jobs:
-        text = (job.get("industry", "") + " " + job.get("title", "")).lower()
-        if any(kw.lower() in text for kw in keywords):
+        industry_text = (job.get("industry", "") or "").lower()
+        title_text = (job.get("title", "") or "").lower()
+        if any(_kw_match(industry_text, kw) or _kw_match(title_text, kw) for kw in keywords):
             result.append(job)
     return result
+
+
+def _kw_match(text: str, kw: str) -> bool:
+    """关键词匹配：中文用子串，英文/数字用词边界匹配，避免短词误命中。"""
+    if not kw or not text:
+        return False
+    kw = kw.lower()
+    text = text.lower()
+    # 中文关键词：子串匹配（中文天然无词边界歧义）
+    if any("\u4e00" <= ch <= "\u9fff" for ch in kw):
+        return kw in text
+    # 英文/数字关键词：词边界匹配（ic 不会命中 technical，ai 不会命中 email）
+    return bool(re.search(r"(?<![a-z0-9])" + re.escape(kw) + r"(?![a-z0-9])", text))
 
 
 def dedupe_jobs(jobs: list) -> list:
