@@ -32,3 +32,8 @@ public/notion/*
 # Python
 __pycache__/
 *.py[cod]
+
+# 本地抓取结果与登录凭证（避免误提交敏感信息）
+jobs_result.json
+jobs_result.md
+data/boss_cookies.json
