@@ -72,12 +72,18 @@ def get_safe_storage_key() -> bytes:
 
 
 def decrypt_v10(safe_key: bytes, encrypted_value: bytes) -> str:
-    """解密 Chrome v10 格式的 Cookie（AES-128-CBC + PBKDF2）。"""
+    """解密 Chrome v10 格式的 Cookie。
+
+    实测结构（Chrome 147 / macOS）：
+        "v10" + 16 字节(按域名变化的块) + 16 字节随机 IV + AES-128-CBC 密文
+    因此需跳过前 32 字节，并用第 16~32 字节作为 IV。
+    """
     payload = encrypted_value[3:]  # 去掉 "v10" 前缀
     derived = hashlib.pbkdf2_hmac("sha1", safe_key, b"saltysalt", 1003, 16)
-    iv = b" " * 16
+    iv = payload[16:32]
+    ciphertext = payload[32:]
     decryptor = Cipher(algorithms.AES(derived), modes.CBC(iv)).decryptor()
-    plain = decryptor.update(payload) + decryptor.finalize()
+    plain = decryptor.update(ciphertext) + decryptor.finalize()
     # 去掉 PKCS#7 填充
     pad_len = plain[-1]
     return plain[:-pad_len].decode("utf-8", errors="replace")
