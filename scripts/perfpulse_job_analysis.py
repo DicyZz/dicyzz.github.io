@@ -24,7 +24,7 @@ from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from xml.etree import ElementTree as ET
 
 import requests
@@ -48,6 +48,9 @@ EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER") or EMAIL_SENDER
 
 MAX_JOBS = int(os.getenv("MAX_JOBS") or 30)
 BOSS_COOKIE_FILE = "data/boss_cookies.json"
+# BOSS 直聘专用代理（可选）：http://user:pass@host:port 或 socks5://user:pass@host:port
+# 用于 GitHub 云端 runner（海外 IP）通过国内代理出口抓 BOSS。
+BOSS_PROXY = os.getenv("BOSS_PROXY") or ""
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -404,6 +407,25 @@ def load_boss_cookies() -> list:
     return cookies
 
 
+def _boss_proxy_options() -> dict:
+    """把 BOSS_PROXY 转成 Playwright 的 proxy 启动参数。"""
+    if not BOSS_PROXY:
+        return {}
+    raw = BOSS_PROXY.strip()
+    if "://" not in raw:
+        raw = "http://" + raw
+    u = urlparse(raw)
+    if not u.hostname:
+        print(f"⚠️ [BOSS] BOSS_PROXY 格式无效: {BOSS_PROXY}")
+        return {}
+    port = u.port or (1080 if u.scheme in ("socks5", "socks5h") else 80)
+    return {
+        "server": f"{u.scheme}://{u.hostname}:{port}",
+        "username": u.username or "",
+        "password": u.password or "",
+    }
+
+
 def fetch_boss_jobs(keyword: str, city: str) -> list:
     """抓取 BOSS 直聘。仅当配置了 Cookie 才执行；海外 IP 会被风控。"""
     try:
@@ -422,7 +444,12 @@ def fetch_boss_jobs(keyword: str, city: str) -> list:
     jobs = []
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            proxy = _boss_proxy_options()
+            launch_kwargs = {"headless": True}
+            if proxy:
+                launch_kwargs["proxy"] = proxy
+                print(f"   ↳ 使用代理: {proxy['server']}")
+            browser = p.chromium.launch(**launch_kwargs)
             context = browser.new_context(
                 user_agent=USER_AGENT, viewport={"width": 1280, "height": 800}, locale="zh-CN",
             )
