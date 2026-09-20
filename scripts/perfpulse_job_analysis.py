@@ -18,6 +18,8 @@ import re
 import smtplib
 import time
 from datetime import datetime
+from email import encoders
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from urllib.parse import quote
@@ -586,7 +588,7 @@ def fetch_remotive_jobs(keyword: str, city: str) -> list:
 
 
 # ==================== 9. 结果落盘与 Actions 摘要 ====================
-def save_results(jobs: list):
+def save_results(jobs: list) -> str:
     with open("jobs_result.json", "w", encoding="utf-8") as f:
         json.dump(jobs, f, ensure_ascii=False, indent=2)
 
@@ -623,16 +625,78 @@ def save_results(jobs: list):
         with open(summary_path, "a", encoding="utf-8") as f:
             f.write(md)
     print("💾 结果已保存到 jobs_result.json / jobs_result.md")
+    return md
 
 
-# ==================== 10. DeepSeek 分析 + 邮件（可选） ====================
-def analyze_and_send(jobs: list):
+# ==================== 10. 邮件发送 ====================
+def _build_email_body(md: str):
+    """把 Markdown 结果转换为带样式的 HTML（含纯文本版）。"""
+    raw_html = markdown.markdown(md, extensions=["tables", "fenced_code"])
+    styled_html = transform(
+        "<html><body>"
+        "<style>"
+        "table{border-collapse:collapse;width:100%;}"
+        "th,td{border:1px solid #ddd;padding:6px 8px;font-size:13px;text-align:left;}"
+        "th{background:#f5f7fa;}"
+        "a{color:#1a73e8;}"
+        "</style>"
+        f"<div style='max-width:1100px;margin:0 auto;padding:20px;'>{raw_html}</div>"
+        "</body></html>"
+    )
+    return styled_html, md
+
+
+def send_result_email(jobs: list, md: str):
+    """把抓取结果发送到邮箱（附完整 JSON 附件）。"""
+    if not EMAIL_SENDER or not EMAIL_PASSWORD:
+        print("ℹ️ 未配置 EMAIL_SENDER / EMAIL_PASSWORD，跳过邮件发送")
+        return
+
+    subject = (
+        f"【招聘监控】{TARGET_CITY} · {TARGET_JOB}"
+        + (f" · {TARGET_INDUSTRY}" if TARGET_INDUSTRY != "不限" else "")
+        + f" - {len(jobs)} 个岗位 ({datetime.now().strftime('%Y-%m-%d')})"
+    )
+    html, text = _build_email_body(md)
+
+    msg = MIMEMultipart("mixed")
+    msg["Subject"] = subject
+    msg["From"] = EMAIL_SENDER
+    msg["To"] = EMAIL_RECEIVER
+
+    # 正文：纯文本 + HTML 双版本
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(text, "plain", "utf-8"))
+    alt.attach(MIMEText(html, "html", "utf-8"))
+    msg.attach(alt)
+
+    # 附件：完整 JSON 数据
+    if jobs:
+        payload = json.dumps(jobs, ensure_ascii=False, indent=2).encode("utf-8")
+        att = MIMEBase("application", "octet-stream")
+        att.set_payload(payload)
+        encoders.encode_base64(att)
+        att.add_header("Content-Disposition", "attachment", filename="jobs_result.json")
+        msg.attach(att)
+
+    try:
+        with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, timeout=30) as server:
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
+        print(f"🎉 邮件已发送到 {EMAIL_RECEIVER}（{len(jobs)} 个岗位）")
+    except Exception as e:
+        print(f"❌ 邮件发送失败: {e}")
+
+
+# ==================== 11. DeepSeek 分析（可选） ====================
+def analyze_jobs(jobs: list):
+    """用 DeepSeek 对岗位数据做总结分析（可选，需配置 DEEPSEEK_API_KEY）。"""
     if not jobs:
         print("ℹ️ 无岗位数据，跳过分析")
-        return
+        return None
     if not DEEPSEEK_API_KEY:
-        print("ℹ️ 未配置 DEEPSEEK_API_KEY，跳过 AI 分析与邮件")
-        return
+        print("ℹ️ 未配置 DEEPSEEK_API_KEY，跳过 AI 分析（数据邮件仍会发送）")
+        return None
     client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
     prompt = f"""
 你是一位资深招聘分析师。请分析以下在【{TARGET_CITY}】采集到的【{TARGET_JOB}】实时招聘数据（行业：{TARGET_INDUSTRY}）。
@@ -651,23 +715,7 @@ def analyze_and_send(jobs: list):
     response = client.chat.completions.create(
         model=DEEPSEEK_MODEL, messages=[{"role": "user", "content": prompt}], temperature=0.2,
     )
-    briefing_md = response.choices[0].message.content
-    raw_html = markdown.markdown(briefing_md, extensions=["tables", "fenced_code"])
-    styled_html = transform(
-        f"<html><body><div style='max-width:700px;margin:0 auto;padding:20px;'>{raw_html}</div></body></html>"
-    )
-    if EMAIL_SENDER and EMAIL_PASSWORD:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"【PerfPulse】{TARGET_CITY} · {TARGET_JOB} 岗位分析 ({datetime.now().strftime('%Y-%m-%d')})"
-        msg["From"] = EMAIL_SENDER
-        msg["To"] = EMAIL_RECEIVER
-        msg.attach(MIMEText(styled_html, "html", "utf-8"))
-        with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT) as server:
-            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-            server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
-        print("🎉 邮件发送成功！")
-    else:
-        print("⚠️ 未配置邮件账号，跳过发送")
+    return response.choices[0].message.content
 
 
 if __name__ == "__main__":
@@ -689,5 +737,8 @@ if __name__ == "__main__":
     all_jobs = filter_by_industry(all_jobs, TARGET_INDUSTRY)
     print(f"🏭 按行业 [{TARGET_INDUSTRY}] 过滤后 {len(all_jobs)} 条")
 
-    save_results(all_jobs)
-    analyze_and_send(all_jobs)
+    result_md = save_results(all_jobs)
+    # 始终发送抓取数据（只要配置了邮箱）
+    send_result_email(all_jobs, result_md)
+    # DeepSeek 分析（可选）
+    analyze_jobs(all_jobs)
