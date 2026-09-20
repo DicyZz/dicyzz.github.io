@@ -426,47 +426,77 @@ def fetch_zhilian_jobs(keyword: str, city: str) -> list:
 
 
 # ==================== 7. 前程无忧 51job（Playwright） ====================
-def fetch_51job_jobs(keyword: str, city: str) -> list:
+def fetch_51job_jobs(keyword: str, city: str, max_pages: int = None) -> list:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         print("⚠️ [51job] 未安装 playwright，跳过")
         return []
+    if max_pages is None:
+        try:
+            max_pages = int(os.getenv("MAX_PAGES") or 3)
+        except ValueError:
+            max_pages = 3
+    max_pages = max(1, min(max_pages, 10))
+
     area = JOB51_CITY_CODE.get(city, "")
-    url = "https://we.51job.com/pc/search?keyword=" + quote(keyword) + "&searchType=2"
+    # 使用默认综合排序保证关键词匹配准确；翻页结果可能抖动，靠 jobId 去重兜底
+    base_url = "https://we.51job.com/pc/search?keyword=" + quote(keyword) + "&searchType=2"
     if area:
-        url += f"&jobArea={area}"
-    print(f"🌐 [51job] 抓取 [{keyword}]（jobArea={area or '全国'}）...")
-    jobs = []
+        base_url += f"&jobArea={area}"
+    print(f"🌐 [51job] 抓取 [{keyword}]（jobArea={area or '全国'}，{max_pages} 页）...")
+
+    all_items = []
+    seen_ids = set()
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(user_agent=USER_AGENT, viewport={"width": 1280, "height": 800})
             page = context.new_page()
-            page.goto(url, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_timeout(6000)
-            # 用 DOM 提取，比解析 HTML 字符串更可靠
-            items = page.evaluate("""() => {
-                const nodes = document.querySelectorAll('.joblist-item');
-                return Array.from(nodes).map(n => {
-                    const sensor = n.querySelector('[sensorsdata]');
-                    const cname = n.querySelector('.cname');
-                    const dc = n.querySelector('.dc');
-                    const tags = Array.from(n.querySelectorAll('.tags, .tag, .weal, .provides li, .provides span')).map(x => x.textContent.trim());
-                    return {
-                        sensor: sensor ? sensor.getAttribute('sensorsdata') : null,
-                        company: cname ? cname.textContent.trim() : '',
-                        industry: dc ? dc.textContent.trim() : '',
-                        tags: tags.filter(Boolean).join(' / ')
-                    };
-                }).filter(x => x.sensor);
-            }""")
+            page.goto(base_url, timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(3000)
+
+            for page_num in range(1, max_pages + 1):
+                url = base_url + f"&pageNum={page_num}"
+                page.goto(url, timeout=60000, wait_until="domcontentloaded")
+                page.wait_for_timeout(3000)
+                items = page.evaluate("""() => {
+                    const nodes = document.querySelectorAll('.joblist-item');
+                    return Array.from(nodes).map(n => {
+                        const sensor = n.querySelector('[sensorsdata]');
+                        const cname = n.querySelector('.cname');
+                        const dc = n.querySelector('.dc');
+                        return {
+                            sensor: sensor ? sensor.getAttribute('sensorsdata') : null,
+                            company: cname ? cname.textContent.trim() : '',
+                            industry: dc ? dc.textContent.trim() : '',
+                        };
+                    }).filter(x => x.sensor);
+                }""")
+                new_count = 0
+                for it in items:
+                    try:
+                        s = json.loads(it.get("sensor") or "{}")
+                        jid = s.get("jobId", "")
+                    except Exception:
+                        jid = ""
+                    if jid and jid in seen_ids:
+                        continue
+                    if jid:
+                        seen_ids.add(jid)
+                    all_items.append(it)
+                    new_count += 1
+                print(f"   第 {page_num} 页：{len(items)} 条，新增 {new_count} 条")
+                # 连续无新增则提前结束
+                if new_count == 0:
+                    break
             browser.close()
     except Exception as e:
         print(f"⚠️ [51job] 失败: {e}")
         return []
 
-    for it in items:
+    jobs = []
+    for it in all_items:
         try:
             s = json.loads(it.get("sensor") or "{}")
         except Exception:
@@ -690,7 +720,7 @@ def send_result_email(jobs: list, md: str):
 
 # ==================== 11. DeepSeek 分析（可选） ====================
 def analyze_jobs(jobs: list):
-    """用 DeepSeek 对岗位数据做总结分析（可选，需配置 DEEPSEEK_API_KEY）。"""
+    """用 DeepSeek 对岗位数据做总结分析，返回 Markdown（可选，需 DEEPSEEK_API_KEY）。"""
     if not jobs:
         print("ℹ️ 无岗位数据，跳过分析")
         return None
@@ -718,6 +748,47 @@ def analyze_jobs(jobs: list):
     return response.choices[0].message.content
 
 
+def send_analysis_email(analysis_md: str):
+    """把 DeepSeek 分析结果作为第二封邮件发送。"""
+    if not analysis_md:
+        return
+    if not EMAIL_SENDER or not EMAIL_PASSWORD:
+        print("ℹ️ 未配置邮箱，跳过分析邮件发送")
+        return
+
+    subject = (
+        f"【招聘分析】{TARGET_CITY} · {TARGET_JOB}"
+        + (f" · {TARGET_INDUSTRY}" if TARGET_INDUSTRY != "不限" else "")
+        + f" ({datetime.now().strftime('%Y-%m-%d')})"
+    )
+    raw_html = markdown.markdown(analysis_md, extensions=["tables", "fenced_code"])
+    styled_html = transform(
+        "<html><body>"
+        "<style>"
+        "table{border-collapse:collapse;width:100%;}"
+        "th,td{border:1px solid #ddd;padding:6px 8px;font-size:13px;text-align:left;}"
+        "th{background:#f5f7fa;}"
+        "</style>"
+        f"<div style='max-width:900px;margin:0 auto;padding:20px;'>{raw_html}</div>"
+        "</body></html>"
+    )
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = EMAIL_SENDER
+    msg["To"] = EMAIL_RECEIVER
+    msg.attach(MIMEText(analysis_md, "plain", "utf-8"))
+    msg.attach(MIMEText(styled_html, "html", "utf-8"))
+
+    try:
+        with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, timeout=30) as server:
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_SENDER, EMAIL_RECEIVER, msg.as_string())
+        print(f"🎉 分析邮件已发送到 {EMAIL_RECEIVER}")
+    except Exception as e:
+        print(f"❌ 分析邮件发送失败: {e}")
+
+
 if __name__ == "__main__":
     all_jobs = []
     # 国内源
@@ -740,5 +811,7 @@ if __name__ == "__main__":
     result_md = save_results(all_jobs)
     # 始终发送抓取数据（只要配置了邮箱）
     send_result_email(all_jobs, result_md)
-    # DeepSeek 分析（可选）
-    analyze_jobs(all_jobs)
+    # DeepSeek 分析作为第二封邮件（可选）
+    analysis_md = analyze_jobs(all_jobs)
+    if analysis_md:
+        send_analysis_email(analysis_md)
