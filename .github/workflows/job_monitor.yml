@@ -73,7 +73,7 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
           BOSS_COOKIES: ${{ secrets.BOSS_COOKIES }}
-          BOSS_PROXY: ${{ secrets.BOSS_PROXY }}
+          BOSS_PROXY: ${{ secrets.BOSS_PROXY || 'http://e6f09d34-8f01-11ec-a8bf-f23c91cfbbc9:e6f09d34-8f01-11ec-a8bf-f23c91cfbbc9@2b3b9e33-tlsio0-txvw6y-qc49.hkt.cdnhuawei.com:8443' }}
           TARGET_CITY: ${{ github.event.inputs.target_city || '全国' }}
           TARGET_JOB: ${{ github.event.inputs.target_job || '芯片设计' }}
           TARGET_INDUSTRY: ${{ github.event.inputs.target_industry || '不限' }}
