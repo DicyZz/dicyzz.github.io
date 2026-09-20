@@ -61,7 +61,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install requests markdown premailer openai playwright
-          python -m playwright install --with-deps chromium
+          if [ "$(uname)" = "Linux" ]; then
+            python -m playwright install --with-deps chromium
+          else
+            python -m playwright install chromium
+          fi
 
       - name: Run Job Analysis Script
         env:
@@ -74,6 +78,8 @@ jobs:
           EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
           BOSS_COOKIES: ${{ secrets.BOSS_COOKIES }}
           BOSS_PROXY: ${{ secrets.BOSS_PROXY }}
+          BOSS_PROFILE_DIR: ${{ secrets.BOSS_PROFILE_DIR || '' }}
+          BOSS_HEADFUL: ${{ secrets.BOSS_HEADFUL || '1' }}
           TARGET_CITY: ${{ github.event.inputs.target_city || '全国' }}
           TARGET_JOB: ${{ github.event.inputs.target_job || '芯片设计' }}
           TARGET_INDUSTRY: ${{ github.event.inputs.target_industry || '不限' }}
