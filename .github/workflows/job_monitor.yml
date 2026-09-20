@@ -12,7 +12,7 @@ on:
         required: false
         default: '全国'
       target_job:
-        description: '目标岗位关键词（如：芯片设计、算法工程师、C++）'
+        description: '目标岗位关键词（如：芯片设计、算法工程师、建模；会自动扩展同义词）'
         required: false
         default: '芯片设计'
       max_pages:

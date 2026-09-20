@@ -155,16 +155,121 @@ JOB_EN_KEYWORDS = {
     "前端开发": ["frontend", "react", "vue", "web"],
     "产品": ["product", "product manager"],
     "运营": ["operations", "marketing", "growth"],
+    # 建模/仿真相关（用于国外远程岗位源翻译）
+    "建模": ["modeling", "simulation", "systemc", "model", "architecture"],
+    "仿真": ["simulation", "modeling", "systemc", "emulation"],
+    "系统建模": ["system modeling", "modeling", "simulation", "systemc"],
+    "性能建模": ["performance modeling", "modeling", "simulation"],
+    "架构仿真": ["architecture simulation", "simulation", "systemc", "modeling"],
+    "版图": ["layout", "physical design", "custom layout"],
+    "数字前端": ["rtl", "verilog", "digital design", "frontend design"],
+    "数字后端": ["physical design", "place and route", "backend design"],
 }
+
+
+# 中文/英文岗位关键词同义词表：输入一个关键词，自动扩展相关搜索词。
+# 匹配规则：取与输入词重合最长的那一组；同义词按原样加入搜索，最终统一去重。
+KEYWORD_SYNONYMS = {
+    "建模": ["系统建模", "性能建模", "架构建模", "架构仿真", "系统仿真",
+           "ESL建模", "SystemC", "C模型", "仿真建模", "模型开发", "Modeling", "Simulation"],
+    "芯片设计": ["IC设计", "数字IC设计", "模拟IC设计", "数字前端", "数字后端",
+             "SoC设计", "ASIC设计", "RTL设计", "FPGA设计", "芯片架构", "版图设计", "集成电路设计"],
+    "芯片": ["芯片设计", "IC设计", "集成电路", "半导体", "微电子",
+           "FPGA", "ASIC", "SoC", "RTL", "数字IC", "模拟IC"],
+    "集成电路": ["芯片设计", "IC设计", "数字IC", "模拟IC", "版图设计",
+              "SoC设计", "ASIC设计", "RTL设计", "FPGA", "微电子"],
+    "算法": ["机器学习", "深度学习", "大模型", "计算机视觉", "推荐算法",
+           "自然语言处理", "NLP", "数据挖掘", "Algorithm", "Machine Learning"],
+    "人工智能": ["AI", "机器学习", "深度学习", "大模型", "计算机视觉",
+              "自然语言处理", "NLP", "推荐算法", "算法工程师"],
+    "大模型": ["LLM", "大语言模型", "AIGC", "生成式AI", "NLP", "机器学习", "深度学习"],
+    "后端": ["服务端", "后端开发", "Java", "Golang", "Go", "Python后端",
+           "微服务", "Backend", "Server"],
+    "前端": ["Web前端", "前端开发", "Vue", "React", "JavaScript", "TypeScript", "Frontend"],
+    "测试": ["软件测试", "自动化测试", "测试开发", "性能测试", "QA", "Test"],
+    "运维": ["DevOps", "SRE", "系统运维", "Linux运维", "云平台", "Kubernetes", "K8s"],
+    "数据": ["数据分析", "数据开发", "数据挖掘", "大数据", "数据库",
+           "数据仓库", "数据科学", "Data", "SQL"],
+    "嵌入式": ["嵌入式软件", "单片机", "Linux驱动", "BSP", "Firmware",
+            "RTOS", "ARM", "MCU"],
+    "java": ["Java开发", "Java工程师", "Spring", "微服务", "JVM", "后端"],
+    "python": ["Python开发", "Python工程师", "数据分析", "机器学习", "后端", "Django", "Flask"],
+    "c++": ["C++开发", "C++工程师", "Qt", "Linux", "音视频", "嵌入式", "Cpp"],
+    "产品": ["产品经理", "产品设计", "需求分析", "Product Manager", "PM"],
+    "设计": ["UI设计", "UX设计", "交互设计", "视觉设计", "平面设计", "Designer"],
+    "安全": ["网络安全", "信息安全", "渗透测试", "安全运维", "Security", "SOC"],
+    "云": ["云计算", "云原生", "AWS", "Azure", "GCP", "DevOps", "Kubernetes"],
+    "游戏": ["游戏开发", "Unity", "Unreal", "UE", "Game", "Cocos"],
+    "运营": ["用户运营", "内容运营", "新媒体运营", "产品运营", "增长", "Operations"],
+}
+
+
+def _norm_kw(text: str) -> str:
+    """去掉空格、连字符、斜杠等，用于同义词别名匹配。"""
+    return re.sub(r"[\s_\-/·.]+", "", (text or "").lower())
+
+
+def expand_keywords(keyword: str) -> list:
+    """把一个岗位关键词扩展为多个搜索词。
+
+    - 默认始终保留原始输入。
+    - 若原始输入包含多个词（空格/逗号等分隔），则每个词分别匹配同义词组。
+    - 每组取“与输入词重合最长”的别名，避免「芯片设计」误命中「芯片」等宽泛组。
+    - 通过环境变量 ENABLE_KEYWORD_EXPANSION=0/false/no 可关闭扩展。
+    """
+    raw = (keyword or "").strip()
+    if not raw:
+        return [raw]
+    enabled = os.getenv("ENABLE_KEYWORD_EXPANSION", "1").strip().lower()
+    if enabled in {"0", "false", "no", "off"}:
+        return [raw]
+
+    result = [raw]
+
+    def add_groups(token: str):
+        norm = _norm_kw(token)
+        if not norm:
+            return
+        # 1) 优先精确匹配别名；2) 否则取重合最长的一组。
+        best_key, best_len, exact = None, -1, False
+        for alias in KEYWORD_SYNONYMS:
+            na = _norm_kw(alias)
+            if not na:
+                continue
+            if na == norm:
+                if not exact or len(na) > best_len:
+                    best_key, best_len, exact = alias, len(na), True
+            elif not exact and (na in norm or norm in na):
+                if len(na) > best_len:
+                    best_key, best_len = alias, len(na)
+        if not best_key:
+            return
+        for syn in KEYWORD_SYNONYMS[best_key]:
+            if syn and _norm_kw(syn) != norm and syn not in result:
+                result.append(syn)
+
+    # 用常见分隔符拆分多关键词，逐个扩展
+    tokens = [t for t in re.split(r"[,，;；、\s]+", raw) if t]
+    for token in tokens:
+        add_groups(token)
+    return result
+
+def _has_cjk(text: str) -> bool:
+    """是否包含中文字符。"""
+    return any("\u4e00" <= ch <= "\u9fff" for ch in (text or ""))
 
 
 def _translate_en(keyword: str) -> list:
     """把中文岗位关键词翻译成英文匹配词列表。"""
     kw = keyword.strip().lower()
     words = set()
-    for cn, ens in JOB_EN_KEYWORDS.items():
-        if cn in kw:
-            words.update(ens)
+    # 中文取“最长匹配”的一组，避免「数字后端」同时命中「后端」导致翻译偏到 Web 后端。
+    best_key, best_len = None, -1
+    for cn in JOB_EN_KEYWORDS:
+        if cn in kw and len(cn) > best_len:
+            best_key, best_len = cn, len(cn)
+    if best_key:
+        words.update(JOB_EN_KEYWORDS[best_key])
     # 英文原词也保留
     if kw and all(ord(ch) < 128 for ch in kw):
         words.add(kw)
@@ -309,12 +414,13 @@ def fetch_nowcoder_jobs(keyword: str, city: str) -> list:
 
 
 # ==================== 5. 猎聘（Playwright） ====================
-def fetch_liepin_jobs(keyword: str, city: str, max_pages: int = None) -> list:
+def fetch_liepin_jobs(keyword, city: str, max_pages: int = None) -> list:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         print("⚠️ [猎聘] 未安装 playwright，跳过")
         return []
+    keywords = [keyword] if isinstance(keyword, str) else list(keyword)
     if max_pages is None:
         try:
             max_pages = int(os.getenv("MAX_PAGES") or 3)
@@ -323,44 +429,45 @@ def fetch_liepin_jobs(keyword: str, city: str, max_pages: int = None) -> list:
     max_pages = max(1, min(max_pages, 10))
 
     city_code = LIEPIN_CITY_CODE.get(city, LIEPIN_NATIONWIDE)
-    base_url = f"https://www.liepin.com/zhaopin/?key={quote(keyword)}&dq={city_code}"
-    print(f"🌐 [猎聘] 抓取 [{keyword}]（dq={city_code}，{max_pages} 页）...")
+    print(f"🌐 [猎聘] 抓取 {len(keywords)} 个关键词（dq={city_code}，每词 {max_pages} 页）...")
     jobs = []
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(user_agent=USER_AGENT, viewport={"width": 1280, "height": 800}, locale="zh-CN")
             page = context.new_page()
-            page.goto(base_url, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_timeout(3000)
-            for cur in range(max_pages):
-                url = base_url + f"&currentPage={cur}"
-                try:
-                    with page.expect_response(
-                        lambda r: "pc-search-job" in r.url and "cond-init" not in r.url, timeout=30000,
-                    ) as ri:
-                        page.goto(url, timeout=60000, wait_until="domcontentloaded")
-                    data = json.loads(ri.value.text())
-                    cards = data.get("data", {}).get("data", {}).get("jobCardList", [])
-                except Exception as e:
-                    if cur == 0:
-                        print(f"⚠️ [猎聘] 抓取失败: {e}")
-                    break
-                if not cards:
-                    break
-                for c in cards:
-                    j = c.get("job", {}); comp = c.get("comp", {})
-                    title = j.get("title", "")
-                    jobs.append({
-                        "source": "猎聘", "type": "社招", "title": title,
-                        "salary": j.get("salary", ""), "city": j.get("dq", city),
-                        "company": comp.get("compName", ""),
-                        "industry": comp.get("compIndustry", ""),
-                        "scale": comp.get("compScale", ""),
-                        "info": " / ".join(x for x in [j.get("requireWorkYears", ""), j.get("requireEduLevel", "")] if x),
-                        "url": j.get("link", ""),
-                    })
-                page.wait_for_timeout(500)
+            for keyword in keywords:
+                base_url = f"https://www.liepin.com/zhaopin/?key={quote(keyword)}&dq={city_code}"
+                print(f"   ↳ [{keyword}]")
+                page.goto(base_url, timeout=60000, wait_until="domcontentloaded")
+                page.wait_for_timeout(3000)
+                for cur in range(max_pages):
+                    url = base_url + f"&currentPage={cur}"
+                    try:
+                        with page.expect_response(
+                            lambda r: "pc-search-job" in r.url and "cond-init" not in r.url, timeout=30000,
+                        ) as ri:
+                            page.goto(url, timeout=60000, wait_until="domcontentloaded")
+                        data = json.loads(ri.value.text())
+                        cards = data.get("data", {}).get("data", {}).get("jobCardList", [])
+                    except Exception as e:
+                        if cur == 0:
+                            print(f"⚠️ [猎聘] [{keyword}] 抓取失败: {e}")
+                        break
+                    if not cards:
+                        break
+                    for c in cards:
+                        j = c.get("job", {}); comp = c.get("comp", {})
+                        jobs.append({
+                            "source": "猎聘", "type": "社招", "title": j.get("title", ""),
+                            "salary": j.get("salary", ""), "city": j.get("dq", city),
+                            "company": comp.get("compName", ""),
+                            "industry": comp.get("compIndustry", ""),
+                            "scale": comp.get("compScale", ""),
+                            "info": " / ".join(x for x in [j.get("requireWorkYears", ""), j.get("requireEduLevel", "")] if x),
+                            "url": j.get("link", ""),
+                        })
+                    page.wait_for_timeout(500)
             browser.close()
     except Exception as e:
         print(f"⚠️ [猎聘] 失败: {e}")
@@ -369,31 +476,7 @@ def fetch_liepin_jobs(keyword: str, city: str, max_pages: int = None) -> list:
 
 
 # ==================== 6. 智联招聘（Playwright） ====================
-def fetch_zhilian_jobs(keyword: str, city: str) -> list:
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        print("⚠️ [智联] 未安装 playwright，跳过")
-        return []
-    city_code = ZHILIAN_CITY_CODE.get(city)
-    url = f"https://sou.zhaopin.com/?kw={quote(keyword)}"
-    if city_code:
-        url += f"&jl={city_code}"
-    print(f"🌐 [智联] 抓取 [{keyword}]（{'全国' if not city_code else city}）...")
-    jobs = []
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(user_agent=USER_AGENT, viewport={"width": 1280, "height": 800})
-            page = context.new_page()
-            page.goto(url, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_timeout(6000)
-            html = page.content()
-            browser.close()
-    except Exception as e:
-        print(f"⚠️ [智联] 失败: {e}")
-        return []
-
+def _parse_zhilian_html(html: str, city: str) -> list:
     m = re.search(r'__INITIAL_STATE__=(\{.*?\})\s*</script>', html, re.S)
     if not m:
         print("⚠️ [智联] 未找到 __INITIAL_STATE__")
@@ -404,7 +487,7 @@ def fetch_zhilian_jobs(keyword: str, city: str) -> list:
     except Exception as e:
         print(f"⚠️ [智联] 解析失败: {e}")
         return []
-
+    jobs = []
     for item in pl:
         try:
             cc = json.loads(item.get("cardCustomJson") or "{}")
@@ -421,17 +504,53 @@ def fetch_zhilian_jobs(keyword: str, city: str) -> list:
             "info": " / ".join(x for x in [item.get("education", ""), item.get("propertyName", "")] if x),
             "url": item.get("positionURL") or item.get("positionUrl", ""),
         })
+    return jobs
+
+
+def fetch_zhilian_jobs(keyword, city: str) -> list:
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("⚠️ [智联] 未安装 playwright，跳过")
+        return []
+    keywords = [keyword] if isinstance(keyword, str) else list(keyword)
+    city_code = ZHILIAN_CITY_CODE.get(city)
+    print(f"🌐 [智联] 抓取 {len(keywords)} 个关键词（{'全国' if not city_code else city}）...")
+
+    html_pages = []
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(user_agent=USER_AGENT, viewport={"width": 1280, "height": 800})
+            page = context.new_page()
+            for keyword in keywords:
+                url = f"https://sou.zhaopin.com/?kw={quote(keyword)}"
+                if city_code:
+                    url += f"&jl={city_code}"
+                print(f"   ↳ [{keyword}]")
+                page.goto(url, timeout=60000, wait_until="domcontentloaded")
+                page.wait_for_timeout(6000)
+                html_pages.append(page.content())
+            browser.close()
+    except Exception as e:
+        print(f"⚠️ [智联] 失败: {e}")
+        return []
+
+    jobs = []
+    for html in html_pages:
+        jobs.extend(_parse_zhilian_html(html, city))
     print(f"🔍 [智联] 检索到 {len(jobs)} 条")
     return jobs
 
 
 # ==================== 7. 前程无忧 51job（Playwright） ====================
-def fetch_51job_jobs(keyword: str, city: str, max_pages: int = None) -> list:
+def fetch_51job_jobs(keyword, city: str, max_pages: int = None) -> list:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         print("⚠️ [51job] 未安装 playwright，跳过")
         return []
+    keywords = [keyword] if isinstance(keyword, str) else list(keyword)
     if max_pages is None:
         try:
             max_pages = int(os.getenv("MAX_PAGES") or 3)
@@ -440,11 +559,7 @@ def fetch_51job_jobs(keyword: str, city: str, max_pages: int = None) -> list:
     max_pages = max(1, min(max_pages, 10))
 
     area = JOB51_CITY_CODE.get(city, "")
-    # 使用默认综合排序保证关键词匹配准确；翻页结果可能抖动，靠 jobId 去重兜底
-    base_url = "https://we.51job.com/pc/search?keyword=" + quote(keyword) + "&searchType=2"
-    if area:
-        base_url += f"&jobArea={area}"
-    print(f"🌐 [51job] 抓取 [{keyword}]（jobArea={area or '全国'}，{max_pages} 页）...")
+    print(f"🌐 [51job] 抓取 {len(keywords)} 个关键词（jobArea={area or '全国'}，每词 {max_pages} 页）...")
 
     all_items = []
     seen_ids = set()
@@ -453,43 +568,48 @@ def fetch_51job_jobs(keyword: str, city: str, max_pages: int = None) -> list:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(user_agent=USER_AGENT, viewport={"width": 1280, "height": 800})
             page = context.new_page()
-            page.goto(base_url, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_timeout(3000)
-
-            for page_num in range(1, max_pages + 1):
-                url = base_url + f"&pageNum={page_num}"
-                page.goto(url, timeout=60000, wait_until="domcontentloaded")
+            for keyword in keywords:
+                base_url = "https://we.51job.com/pc/search?keyword=" + quote(keyword) + "&searchType=2"
+                if area:
+                    base_url += f"&jobArea={area}"
+                print(f"   ↳ [{keyword}]")
+                page.goto(base_url, timeout=60000, wait_until="domcontentloaded")
                 page.wait_for_timeout(3000)
-                items = page.evaluate("""() => {
-                    const nodes = document.querySelectorAll('.joblist-item');
-                    return Array.from(nodes).map(n => {
-                        const sensor = n.querySelector('[sensorsdata]');
-                        const cname = n.querySelector('.cname');
-                        const dc = n.querySelector('.dc');
-                        return {
-                            sensor: sensor ? sensor.getAttribute('sensorsdata') : null,
-                            company: cname ? cname.textContent.trim() : '',
-                            industry: dc ? dc.textContent.trim() : '',
-                        };
-                    }).filter(x => x.sensor);
-                }""")
-                new_count = 0
-                for it in items:
-                    try:
-                        s = json.loads(it.get("sensor") or "{}")
-                        jid = s.get("jobId", "")
-                    except Exception:
-                        jid = ""
-                    if jid and jid in seen_ids:
-                        continue
-                    if jid:
-                        seen_ids.add(jid)
-                    all_items.append(it)
-                    new_count += 1
-                print(f"   第 {page_num} 页：{len(items)} 条，新增 {new_count} 条")
-                # 连续无新增则提前结束
-                if new_count == 0:
-                    break
+
+                for page_num in range(1, max_pages + 1):
+                    url = base_url + f"&pageNum={page_num}"
+                    page.goto(url, timeout=60000, wait_until="domcontentloaded")
+                    page.wait_for_timeout(3000)
+                    items = page.evaluate("""() => {
+                        const nodes = document.querySelectorAll('.joblist-item');
+                        return Array.from(nodes).map(n => {
+                            const sensor = n.querySelector('[sensorsdata]');
+                            const cname = n.querySelector('.cname');
+                            const dc = n.querySelector('.dc');
+                            return {
+                                sensor: sensor ? sensor.getAttribute('sensorsdata') : null,
+                                company: cname ? cname.textContent.trim() : '',
+                                industry: dc ? dc.textContent.trim() : '',
+                            };
+                        }).filter(x => x.sensor);
+                    }""")
+                    new_count = 0
+                    for it in items:
+                        try:
+                            s = json.loads(it.get("sensor") or "{}")
+                            jid = s.get("jobId", "")
+                        except Exception:
+                            jid = ""
+                        if jid and jid in seen_ids:
+                            continue
+                        if jid:
+                            seen_ids.add(jid)
+                        all_items.append(it)
+                        new_count += 1
+                    print(f"   第 {page_num} 页：{len(items)} 条，新增 {new_count} 条")
+                    # 连续无新增则提前结束
+                    if new_count == 0:
+                        break
             browser.close()
     except Exception as e:
         print(f"⚠️ [51job] 失败: {e}")
@@ -521,6 +641,9 @@ def fetch_remoteok_jobs(keyword: str, city: str) -> list:
     """RemoteOK 远程岗位 API（英文，按关键词过滤）。"""
     print(f"🌐 [RemoteOK] 抓取 [{keyword}]...")
     en_words = _translate_en(keyword)
+    if _has_cjk(keyword) and not en_words:
+        print("   ↳ 无英文映射，跳过")
+        return []
     jobs = []
     try:
         resp = requests.get("https://remoteok.com/api", headers={"User-Agent": USER_AGENT}, timeout=30)
@@ -557,6 +680,9 @@ def fetch_wwr_jobs(keyword: str, city: str) -> list:
     """We Work Remotely 远程岗位 RSS（英文）。"""
     print(f"🌐 [WWR] 抓取 [{keyword}]...")
     en_words = _translate_en(keyword)
+    if _has_cjk(keyword) and not en_words:
+        print("   ↳ 无英文映射，跳过")
+        return []
     jobs = []
     feeds = [
         "https://weworkremotely.com/categories/remote-programming-jobs.rss",
@@ -591,6 +717,9 @@ def fetch_remotive_jobs(keyword: str, city: str) -> list:
     """Remotive 远程岗位 API（英文）。"""
     print(f"🌐 [Remotive] 抓取 [{keyword}]...")
     en_words = _translate_en(keyword)
+    if _has_cjk(keyword) and not en_words:
+        print("   ↳ 无英文映射，跳过")
+        return []
     jobs = []
     try:
         resp = requests.get("https://remotive.com/api/remote-jobs", headers={"User-Agent": USER_AGENT}, timeout=20)
@@ -790,16 +919,21 @@ def send_analysis_email(analysis_md: str):
 
 
 if __name__ == "__main__":
+    keywords = expand_keywords(TARGET_JOB)
+    print(f"\n🔎 岗位关键词扩展为 {len(keywords)} 个：{keywords}")
+
     all_jobs = []
-    # 国内源
-    all_jobs.extend(fetch_nowcoder_jobs(TARGET_JOB, TARGET_CITY))
-    all_jobs.extend(fetch_liepin_jobs(TARGET_JOB, TARGET_CITY))
-    all_jobs.extend(fetch_zhilian_jobs(TARGET_JOB, TARGET_CITY))
-    all_jobs.extend(fetch_51job_jobs(TARGET_JOB, TARGET_CITY))
-    # 国外源（远程岗位，城市不做硬过滤）
-    all_jobs.extend(fetch_remoteok_jobs(TARGET_JOB, TARGET_CITY))
-    all_jobs.extend(fetch_wwr_jobs(TARGET_JOB, TARGET_CITY))
-    all_jobs.extend(fetch_remotive_jobs(TARGET_JOB, TARGET_CITY))
+    # Playwright 数据源一次启动浏览器，顺序抓取所有扩展关键词
+    all_jobs.extend(fetch_liepin_jobs(keywords, TARGET_CITY))
+    all_jobs.extend(fetch_zhilian_jobs(keywords, TARGET_CITY))
+    all_jobs.extend(fetch_51job_jobs(keywords, TARGET_CITY))
+    for keyword in keywords:
+        # requests 数据源逐个关键词抓取
+        all_jobs.extend(fetch_nowcoder_jobs(keyword, TARGET_CITY))
+        # 国外源（远程岗位，城市不做硬过滤）
+        all_jobs.extend(fetch_remoteok_jobs(keyword, TARGET_CITY))
+        all_jobs.extend(fetch_wwr_jobs(keyword, TARGET_CITY))
+        all_jobs.extend(fetch_remotive_jobs(keyword, TARGET_CITY))
 
     all_jobs = dedupe_jobs(all_jobs)
     print(f"\n📊 去重后共 {len(all_jobs)} 条岗位")
