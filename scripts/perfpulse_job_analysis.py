@@ -3,9 +3,11 @@
 """多源实时抓取指定城市/岗位/行业的招聘信息。
 
 数据源：
-  国内：牛客网、猎聘、智联招聘、前程无忧(51job)
+  国内：牛客网、猎聘、智联招聘、前程无忧(51job)、BOSS 直聘(可选)
   国外：RemoteOK、We Work Remotely、Remotive
-说明：拉勾因滑块验证码无法自动化，已排除；BOSS 直聘因海外 IP 风控已排除。
+说明：拉勾因滑块验证码无法自动化，已排除。
+  BOSS 直聘需配置 BOSS_COOKIES，且必须在「国内 IP」的 self-hosted runner 上运行，
+  否则会被风控重定向到安全校验页（GitHub 云端 runner 为海外 IP，抓不到）。
 
 用法：
     TARGET_CITY=北京 TARGET_JOB=芯片设计 TARGET_INDUSTRY=半导体 python scripts/perfpulse_job_analysis.py
@@ -43,6 +45,9 @@ EMAIL_PORT = int(os.getenv("EMAIL_PORT") or 465)
 EMAIL_SENDER = os.getenv("EMAIL_SENDER") or ""
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD") or ""
 EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER") or EMAIL_SENDER
+
+MAX_JOBS = int(os.getenv("MAX_JOBS") or 30)
+BOSS_COOKIE_FILE = "data/boss_cookies.json"
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -349,6 +354,134 @@ def dedupe_jobs(jobs: list) -> list:
         seen.add(key)
         result.append(job)
     return result
+
+
+# ==================== 3.5 BOSS 直聘（Playwright，需国内 IP + Cookie） ====================
+# BOSS 城市编码（与中国天气网同款编码）；未匹配到的城市回退到「全国」
+BOSS_CITY_CODE_MAP = {
+    "北京": "101010100", "上海": "101020100", "广州": "101280100",
+    "深圳": "101280600", "杭州": "101210100", "成都": "101270100",
+    "武汉": "101200100", "南京": "101190100", "西安": "101110100",
+    "苏州": "101190400", "天津": "101030100", "重庆": "101040100",
+    "长沙": "101250100", "郑州": "101180100", "青岛": "101120200",
+    "济南": "101120100", "大连": "101070200", "沈阳": "101070100",
+    "合肥": "101220100", "厦门": "101230200", "福州": "101230100",
+    "东莞": "101281600", "佛山": "101280800", "珠海": "101280700",
+    "宁波": "101210400", "无锡": "101190200", "昆明": "101290100",
+}
+BOSS_NATIONWIDE_CITY_CODE = "100010000"
+
+
+def _resolve_boss_city_code(city: str) -> str:
+    return BOSS_CITY_CODE_MAP.get((city or "").strip(), BOSS_NATIONWIDE_CITY_CODE)
+
+
+def load_boss_cookies() -> list:
+    """从 BOSS_COOKIES 环境变量或 data/boss_cookies.json 读取登录态。"""
+    raw = os.getenv("BOSS_COOKIES")
+    source = "环境变量 BOSS_COOKIES"
+    if not raw and os.path.exists(BOSS_COOKIE_FILE):
+        with open(BOSS_COOKIE_FILE, "r", encoding="utf-8") as f:
+            raw = f.read()
+        source = BOSS_COOKIE_FILE
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"⚠️ [BOSS] Cookie 解析失败（{source}）: {e}")
+        return []
+    cookies = []
+    if isinstance(data, list):
+        cookies = data
+    elif isinstance(data, dict):
+        for name, value in data.items():
+            cookies.append({"name": name, "value": str(value), "domain": ".zhipin.com", "path": "/"})
+    else:
+        print(f"⚠️ [BOSS] Cookie 格式不正确（{source}），应为 JSON 数组或对象")
+        return []
+    print(f"🔑 [BOSS] 已从 {source} 读取 {len(cookies)} 条 Cookie")
+    return cookies
+
+
+def fetch_boss_jobs(keyword: str, city: str) -> list:
+    """抓取 BOSS 直聘。仅当配置了 Cookie 才执行；海外 IP 会被风控。"""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("⚠️ [BOSS] 未安装 playwright，跳过")
+        return []
+    cookies = load_boss_cookies()
+    if not cookies:
+        print("ℹ️ [BOSS] 未配置 BOSS_COOKIES，跳过 BOSS 直聘")
+        return []
+
+    city_code = _resolve_boss_city_code(city)
+    search_url = f"https://www.zhipin.com/web/geek/job?query={quote(keyword)}&city={city_code}"
+    print(f"🌐 [BOSS直聘] 抓取 [{keyword}]（{'全国' if city_code == BOSS_NATIONWIDE_CITY_CODE else city}）...")
+    jobs = []
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(
+                user_agent=USER_AGENT, viewport={"width": 1280, "height": 800}, locale="zh-CN",
+            )
+            try:
+                context.add_cookies(cookies)
+            except Exception as e:
+                print(f"⚠️ [BOSS] 注入 Cookie 失败: {e}")
+
+            page = context.new_page()
+            page.goto(search_url, timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(5000)
+
+            # 风控/登录检测：被重定向说明 Cookie 失效或 IP 被风控
+            current_url = page.url
+            if any(x in current_url for x in ("passport", "security_check", "verify", "captcha")):
+                print(f"⚠️ [BOSS] 被重定向到登录/安全校验页：{current_url}")
+                print("   海外 IP 会被风控，请改用国内 self-hosted runner 运行本 workflow")
+                browser.close()
+                return []
+
+            # 滚动加载更多岗位
+            for _ in range(3):
+                page.mouse.wheel(0, 4000)
+                page.wait_for_timeout(1500)
+
+            cards = page.query_selector_all(".job-card-wrapper")
+            if not cards:
+                cards = page.query_selector_all(".job-list-box li")
+            if not cards:
+                cards = page.query_selector_all("li.job-card-box")
+            print(f"   ↳ 检索到 {len(cards)} 个岗位卡片")
+
+            for card in cards[:MAX_JOBS]:
+                try:
+                    def _text(sel):
+                        el = card.query_selector(sel)
+                        return el.inner_text().strip() if el else ""
+                    title = _text(".job-name") or _text(".job-title") or _text("a")
+                    company = _text(".company-name") or _text(".boss-name")
+                    salary = _text(".salary")
+                    area = _text(".job-area") or city
+                    link_el = card.query_selector("a[href*='job_detail']") or card.query_selector("a[href*='jobDetail']")
+                    url = (link_el.get_attribute("href") if link_el else "") or ""
+                    if not title:
+                        continue
+                    jobs.append({
+                        "source": "BOSS直聘", "type": "社招",
+                        "title": title, "salary": salary,
+                        "city": area or city, "company": company,
+                        "industry": "", "scale": "",
+                        "info": "", "url": url,
+                    })
+                except Exception:
+                    continue
+            browser.close()
+    except Exception as e:
+        print(f"⚠️ [BOSS] 抓取失败: {e}")
+    print(f"🔍 [BOSS直聘] 检索到 {len(jobs)} 条")
+    return jobs
 
 
 # ==================== 4. 牛客网（requests） ====================
@@ -927,6 +1060,8 @@ if __name__ == "__main__":
     all_jobs.extend(fetch_liepin_jobs(keywords, TARGET_CITY))
     all_jobs.extend(fetch_zhilian_jobs(keywords, TARGET_CITY))
     all_jobs.extend(fetch_51job_jobs(keywords, TARGET_CITY))
+    # BOSS 直聘（仅搜原始关键词一次，避免频繁请求触发风控；需国内 IP）
+    all_jobs.extend(fetch_boss_jobs(keywords[0], TARGET_CITY))
     for keyword in keywords:
         # requests 数据源逐个关键词抓取
         all_jobs.extend(fetch_nowcoder_jobs(keyword, TARGET_CITY))
