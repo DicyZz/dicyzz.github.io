@@ -18,6 +18,27 @@ on:
         description: '城市（填「全国」则不筛选）'
         required: false
         default: '全国'
+      source:
+        description: '抓取平台'
+        required: false
+        default: '全部'
+        type: choice
+        options:
+          - '全部'
+          - '仅 BOSS 直聘'
+          - '仅 猎聘'
+          - 'BOSS + 猎聘'
+          - 'BOSS + 猎聘 + 智联 + 51job'
+          - '国内平台（不含海外远程岗）'
+          - '仅 海外远程岗'
+      pages:
+        description: '每个关键词的翻页数（1-10）'
+        required: false
+        default: '2'
+      keywords:
+        description: '使用前几个扩展关键词（0 = 全部，默认）'
+        required: false
+        default: '0'
       target_industry:
         description: '行业'
         required: false
@@ -99,6 +120,25 @@ jobs:
             echo "::warning::未找到 ${PROFILE}, 本次会跳过 BOSS 直聘; 请在工作机上运行 python3 scripts/boss_login.py 扫码登录"
           fi
 
+      - name: Resolve Sources
+        # 平台选项 -> SOURCES 环境变量（逗号分隔的数据源 key）
+        env:
+          SOURCE_LABEL: ${{ github.event.inputs.source || '全部' }}
+        run: |
+          set -euo pipefail
+          LABEL="${SOURCE_LABEL:-全部}"
+          case "${LABEL}" in
+            '仅 BOSS 直聘')               SOURCES_VALUE="boss" ;;
+            '仅 猎聘')                    SOURCES_VALUE="liepin" ;;
+            'BOSS + 猎聘')                SOURCES_VALUE="boss,liepin" ;;
+            'BOSS + 猎聘 + 智联 + 51job') SOURCES_VALUE="boss,liepin,zhilian,job51" ;;
+            '国内平台（不含海外远程岗）')   SOURCES_VALUE="boss,liepin,zhilian,job51,nowcoder" ;;
+            '仅 海外远程岗')              SOURCES_VALUE="remoteok,wwr,remotive" ;;
+            *)                            SOURCES_VALUE="all" ;;
+          esac
+          echo "抓取平台: ${LABEL} -> ${SOURCES_VALUE}"
+          echo "SOURCES=${SOURCES_VALUE}" >> "${GITHUB_ENV}"
+
       - name: Install Dependencies
         if: env.DEPS_READY != '1'
         run: |
@@ -127,13 +167,12 @@ jobs:
           BOSS_COOKIES: ${{ secrets.BOSS_COOKIES }}
           BOSS_PROXY: ${{ secrets.BOSS_PROXY }}
           BOSS_PROFILE_DIR: ${{ secrets.BOSS_PROFILE_DIR || '' }}
-          # BOSS / 猎聘的抓取强度：改大能扩大覆盖，但更容易触发风控
+          # BOSS 专属参数（平台选择、翻页数、关键词个数见上面 Resolve Sources 与 PAGES/KEYWORD_LIMIT）
           BOSS_HEADFUL: '1'
-          BOSS_PAGES: '1'
-          BOSS_KEYWORDS_COUNT: '1'
           BOSS_MAX_DETAIL: '0'
           BOSS_DEBUG_DIR: boss_debug
-          MAX_PAGES: '1'
+          PAGES: ${{ github.event.inputs.pages || '2' }}
+          KEYWORD_LIMIT: ${{ github.event.inputs.keywords || '0' }}
           TARGET_JOB: ${{ github.event.inputs.target_job || '芯片设计' }}
           TARGET_CITY: ${{ github.event.inputs.target_city || '全国' }}
           TARGET_INDUSTRY: ${{ github.event.inputs.target_industry || '不限' }}

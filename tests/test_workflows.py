@@ -42,7 +42,10 @@ UNSAFE_VARIABLE = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*|[0-9@*?#$!-])[^\x00-\
 
 
 def _iter_run_steps():
-    """遍历所有 workflow 的 run 步骤，产出 (路径, 作业名, 步骤名, 脚本, if 条件)。"""
+    """遍历所有 workflow 的 run 步骤。
+
+    产出 (路径, 作业名, 步骤名, 脚本, if 条件, 步骤 env)。
+    """
     for path in sorted(glob.glob(os.path.join(WORKFLOW_DIR, "*.yml"))):
         with open(path, encoding="utf-8") as f:
             doc = yaml.safe_load(f) or {}
@@ -50,7 +53,10 @@ def _iter_run_steps():
             for step in job.get("steps") or []:
                 script = step.get("run")
                 if script:
-                    yield path, job_name, step.get("name", "?"), script, step.get("if", "") or ""
+                    yield (
+                        path, job_name, step.get("name", "?"), script,
+                        step.get("if", "") or "", step.get("env") or {},
+                    )
 
 
 def _read_env_file(path: str) -> dict:
@@ -102,7 +108,7 @@ class TestWorkflowScripts(unittest.TestCase):
     def test_no_non_ascii_right_after_variable(self):
         """$VAR 后面不能紧跟中文标点（bash 3.2 会把标点吃进变量名）。"""
         offenders = []
-        for path, job, name, script, _cond in _iter_run_steps():
+        for path, job, name, script, _cond, _env in _iter_run_steps():
             if UNSAFE_VARIABLE.search(script):
                 line = next(l for l in script.splitlines() if UNSAFE_VARIABLE.search(l)).strip()
                 offenders.append(f"{os.path.relpath(path, REPO_ROOT)} :: {name} :: {line[:70]}")
@@ -114,7 +120,7 @@ class TestWorkflowScripts(unittest.TestCase):
 
     def test_scripts_are_valid_bash(self):
         """每个 run 脚本都要能通过 /bin/bash 语法检查。"""
-        for path, job, name, script, _cond in _iter_run_steps():
+        for path, job, name, script, _cond, _env in _iter_run_steps():
             result = subprocess.run(
                 ["/bin/bash", "-n"], input=script, text=True, capture_output=True
             )
@@ -135,11 +141,16 @@ class TestWorkflowScripts(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="wf_scripts_") as tmpdir:
             base_env = _stub_env(tmpdir)
             current_job = None
-            for path, job, name, script, condition in _iter_run_steps():
+            for path, job, name, script, condition, step_env in _iter_run_steps():
                 if (path, job) != current_job:  # 换作业就换一份 $GITHUB_ENV
                     current_job = (path, job)
                     open(base_env["GITHUB_ENV"], "w", encoding="utf-8").close()
-                runtime_env = {**base_env, **_read_env_file(base_env["GITHUB_ENV"])}
+                # 步骤自身的 env（跳过 ${{ }} 表达式，值由 GitHub 注入，本地无法还原）
+                literals = {
+                    k: str(v) for k, v in step_env.items()
+                    if not (isinstance(v, str) and "${{" in v)
+                }
+                runtime_env = {**base_env, **literals, **_read_env_file(base_env["GITHUB_ENV"])}
                 if not _condition_allows(condition, runtime_env):
                     continue
                 script_file = os.path.join(tmpdir, "step.sh")
@@ -161,11 +172,13 @@ class TestWorkflowScripts(unittest.TestCase):
             doc = yaml.safe_load(f)
         triggers = doc.get("on") or doc.get(True)
         inputs = triggers["workflow_dispatch"]["inputs"]
-        # 输入项要少：手机上填表负担越低越好
-        self.assertLessEqual(
-            len(inputs), 3, f"workflow_dispatch 输入项过多（{sorted(inputs)}）"
-        )
-        self.assertIn("target_job", inputs)
+        # 所有输入都必须是「可选 + 有默认值」，这样手机上直接点 Run 就能跑
+        for name, spec in inputs.items():
+            self.assertFalse(spec.get("required", False), f"{name} 不应是必填项")
+            self.assertTrue(spec.get("default"), f"{name} 缺少默认值，一键触发会拿到空值")
+        # 三个抓取范围开关：平台 / 翻页数 / 关键词个数
+        for name in ("target_job", "target_city", "source", "pages", "keywords"):
+            self.assertIn(name, inputs)
         job = doc["jobs"]["analyze-jobs"]
         self.assertEqual(job["runs-on"], "self-hosted")
         self.assertIn("concurrency", doc)

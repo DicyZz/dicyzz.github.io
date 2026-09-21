@@ -19,24 +19,20 @@
 
 1. 手机打开 **GitHub App**（或浏览器）→ 进入仓库 `DicyZz/dicyzz.github.io`。
 2. **Actions** → 左侧选 **Job Monitor - 招聘信息实时抓取**。
-3. 点右上 **Run workflow**。只有 3 个输入，默认值都填好了，直接点绿色 **Run workflow** 即可：
+3. 点右上 **Run workflow**。输入都有默认值，什么都不改直接点 **Run workflow** 就能跑：
 
 | 输入 | 默认 | 含义 |
 | --- | --- | --- |
 | `target_job` | 芯片设计 | 岗位关键词，会自动扩展同义词 |
 | `target_city` | 全国 | 目标城市 |
+| `source` | 全部 | 抓哪个平台：全部 / 仅 BOSS / 仅猎聘 / BOSS+猎聘 / BOSS+猎聘+智联+51job / 国内平台 / 仅海外远程岗 |
+| `pages` | 2 | 每个关键词的翻页数（1-10，BOSS/猎聘/51job 生效） |
+| `keywords` | 0 | 使用前几个扩展关键词，**0 = 全部**（默认） |
 | `target_industry` | 不限 | 行业（下拉选择） |
 
-抓取强度（BOSS 翻页数、关键词个数、是否抓详情、猎聘页数等）不是输入项，
-都写在 workflow 的 `env:` 里，需要时直接改文件即可：
-
-| 变量 | 当前值 | 含义 |
-| --- | --- | --- |
-| `BOSS_PAGES` | 1 | BOSS 翻页数，调大覆盖更广但更容易触发风控 |
-| `BOSS_KEYWORDS_COUNT` | 1 | 用前 N 个扩展关键词搜 BOSS |
-| `BOSS_MAX_DETAIL` | 0 | 抓取详情正文的岗位数（建议 ≤5） |
-| `BOSS_HEADFUL` | 1 | BOSS 显示浏览器窗口（更稳）；无人值守出问题时改 0 |
-| `MAX_PAGES` | 1 | 猎聘翻页数 |
+> 想一次抓更多：把 `pages` 调大（例如 3）、`keywords` 保持 0（全部同义词）。
+> 只想验证 BOSS 能不能通：`source` 选「仅 BOSS 直聘」、`pages` 填 1、`keywords` 填 1，几十秒就出结果。
+> 智联招聘当前只取每个关键词的第一页（页面是 SPA，未实现翻页）。
 
 4. 跑完会做两件事：**发邮件**（抓取清单 + 可选的 DeepSeek 分析），并把 `jobs_result.json/md` 上传成 Actions artifact。
 
@@ -143,3 +139,22 @@ python -m unittest discover -s tests -v
 | 抓到 0 条但没报风控 | 关键词/城市组合太窄，换更通用的关键词；或把 `BOSS_PAGES` 调到 2 |
 | 云端 runner 上 BOSS 永远是 0 条 | 海外 IP 被拦截，属预期行为；改用国内 self-hosted runner |
 | 结果里有岗位但城市显示成「全国」 | 该城市未收录在 `boss_scraper.BOSS_CITY_CODE_MAP`，补一行编码即可 |
+
+## 抓取范围（平台 / 翻页 / 关键词个数）
+
+三个开关对应环境变量，workflow 会从表单输入映射过去；本地跑也可以直接用：
+
+```bash
+# 只抓 BOSS，只搜前 2 个关键词，每词 2 页
+SOURCES=boss KEYWORD_LIMIT=2 PAGES=2 TARGET_CITY=北京 TARGET_JOB=芯片设计 \
+  python scripts/perfpulse_job_analysis.py
+```
+
+| 变量 | 取值 | 说明 |
+| --- | --- | --- |
+| `SOURCES` | `all`（默认）或 `boss,liepin,zhilian,job51,nowcoder,remoteok,wwr,remotive` | 要抓哪些平台，未列出的直接跳过 |
+| `PAGES` | 1-10（默认 1；workflow 默认传 2） | 每个关键词的翻页数，BOSS / 猎聘 / 51job 生效 |
+| `KEYWORD_LIMIT` | 0（默认，全部）或正整数 | 用扩展关键词里的前 N 个 |
+
+另外：猎聘如果**连续 3 个关键词都请求失败**（网络出口或风控问题），会自动跳过剩余关键词，
+不再一个个白等 30 秒超时——日志里会写明跳过了多少个。

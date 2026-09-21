@@ -8,9 +8,10 @@
 说明：拉勾因滑块验证码无法自动化，已排除。
   BOSS 直聘需配置 BOSS_COOKIES（或持久化登录 profile），且必须在「国内 IP」的
   self-hosted runner 上运行，否则会被风控重定向到安全校验页（GitHub 云端 runner
-  为海外 IP，抓不到）。BOSS 抓取细节见 scripts/boss_scraper.py，可用环境变量
-  BOSS_PAGES（翻页数）、BOSS_KEYWORDS_COUNT（搜索的关键词个数）、
-  BOSS_MAX_DETAIL（抓取详情正文的岗位数）、BOSS_DEBUG_DIR（诊断产物目录）调整。
+  为海外 IP，抓不到）。
+  BOSS 抓取细节见 scripts/boss_scraper.py；抓取范围用环境变量控制：
+  SOURCES（要抓的平台，逗号分隔或 all）、PAGES（每关键词翻页数）、
+  KEYWORD_LIMIT（用前 N 个扩展关键词，0=全部）。
 
 用法：
     TARGET_CITY=北京 TARGET_JOB=芯片设计 TARGET_INDUSTRY=半导体 python scripts/perfpulse_job_analysis.py
@@ -54,6 +55,51 @@ MAX_JOBS = int(os.getenv("MAX_JOBS") or 30)
 # BOSS 直聘的登录态/Cookie 文件；其余 BOSS 配置（BOSS_PROXY、BOSS_PAGES、
 # BOSS_MAX_DETAIL、BOSS_MODE 等）由 scripts/boss_scraper.py 统一读取。
 BOSS_COOKIE_FILE = "data/boss_cookies.json"
+
+# ---------------- 抓取范围控制 ----------------
+# 数据源开关：SOURCES=boss,liepin,zhilian,job51,nowcoder,remoteok,wwr,remotive
+# 留空或填 all 表示全部开启；未列出的数据源直接跳过。
+SOURCE_KEYS = (
+    "boss", "liepin", "zhilian", "job51", "nowcoder", "remoteok", "wwr", "remotive",
+)
+SOURCE_LABELS = {
+    "boss": "BOSS直聘", "liepin": "猎聘", "zhilian": "智联招聘", "job51": "前程无忧",
+    "nowcoder": "牛客网", "remoteok": "RemoteOK", "wwr": "We Work Remotely",
+    "remotive": "Remotive",
+}
+
+
+def parse_sources(raw: str) -> set:
+    """把 SOURCES 环境变量解析成数据源集合；空值/all 表示全部。"""
+    raw = (raw or "").strip().lower()
+    if not raw or raw in {"all", "全部"}:
+        return set(SOURCE_KEYS)
+    chosen = {p.strip() for p in re.split(r"[,\s]+", raw) if p.strip()}
+    unknown = chosen - set(SOURCE_KEYS)
+    if unknown:
+        print(f"⚠️ 未知数据源 {sorted(unknown)}，已忽略（可选：{', '.join(SOURCE_KEYS)}）")
+    return chosen & set(SOURCE_KEYS)
+
+
+def select_keywords(keywords: list, limit: int = 0) -> list:
+    """limit <= 0 表示用全部扩展关键词（默认）。"""
+    if limit and limit > 0:
+        return keywords[:limit]
+    return keywords
+
+
+def _env_positive_int(name: str, default: int) -> int:
+    try:
+        return int(str(os.getenv(name) or default).strip())
+    except ValueError:
+        return default
+
+
+SOURCES = parse_sources(os.getenv("SOURCES"))
+# 翻页数：各平台通用的每关键词页数（1-10）
+PAGES = max(1, min(_env_positive_int("PAGES", _env_positive_int("MAX_PAGES", 1)), 10))
+# 关键词个数：0（默认）= 用全部扩展关键词
+KEYWORD_LIMIT = _env_positive_int("KEYWORD_LIMIT", 0)
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -370,11 +416,6 @@ import boss_scraper  # noqa: E402
 
 BOSS_CITY_CODE_MAP = boss_scraper.BOSS_CITY_CODE_MAP
 BOSS_NATIONWIDE_CITY_CODE = boss_scraper.BOSS_NATIONWIDE_CITY_CODE
-# 使用前 N 个扩展关键词搜索（默认 1，即社区版行为；可在 workflow 输入里调大）
-try:
-    BOSS_KEYWORDS_COUNT = int(str(os.getenv("BOSS_KEYWORDS_COUNT") or "1").strip())
-except ValueError:
-    BOSS_KEYWORDS_COUNT = 1
 
 
 def load_boss_cookies() -> list:
@@ -382,13 +423,14 @@ def load_boss_cookies() -> list:
     return boss_scraper.load_cookies(BOSS_COOKIE_FILE)
 
 
-def fetch_boss_jobs(keyword, city: str) -> list:
+def fetch_boss_jobs(keyword, city: str, pages: int = None) -> list:
     """抓取 BOSS 直聘：优先 self-hosted 持久化 profile，其次 Cookie 注入。
 
-    keyword 支持单个关键词或关键词列表；翻页与详情抓取由环境变量控制
+    keyword 支持单个关键词或关键词列表；pages 为每个关键词的翻页数
+    （默认取环境变量 PAGES/BOSS_PAGES）。详情抓取等由环境变量控制
     （BOSS_PAGES / BOSS_MAX_DETAIL / BOSS_MODE / BOSS_DEBUG_DIR）。
     """
-    return boss_scraper.fetch_jobs(keyword, city)
+    return boss_scraper.fetch_jobs(keyword, city, pages=pages)
 
 
 # ==================== 4. 牛客网（requests） ====================
@@ -462,21 +504,20 @@ def fetch_liepin_jobs(keyword, city: str, max_pages: int = None) -> list:
         return []
     keywords = [keyword] if isinstance(keyword, str) else list(keyword)
     if max_pages is None:
-        try:
-            max_pages = int(os.getenv("MAX_PAGES") or 3)
-        except ValueError:
-            max_pages = 3
+        max_pages = PAGES
     max_pages = max(1, min(max_pages, 10))
 
     city_code = LIEPIN_CITY_CODE.get(city, LIEPIN_NATIONWIDE)
     print(f"🌐 [猎聘] 抓取 {len(keywords)} 个关键词（dq={city_code}，每词 {max_pages} 页）...")
     jobs = []
+    consecutive_failures = 0
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(user_agent=USER_AGENT, viewport={"width": 1280, "height": 800}, locale="zh-CN")
             page = context.new_page()
-            for keyword in keywords:
+            for idx, keyword in enumerate(keywords):
+                failed = False
                 base_url = f"https://www.liepin.com/zhaopin/?key={quote(keyword)}&dq={city_code}"
                 print(f"   ↳ [{keyword}]")
                 page.goto(base_url, timeout=60000, wait_until="domcontentloaded")
@@ -493,6 +534,7 @@ def fetch_liepin_jobs(keyword, city: str, max_pages: int = None) -> list:
                     except Exception as e:
                         if cur == 0:
                             print(f"⚠️ [猎聘] [{keyword}] 抓取失败: {e}")
+                            failed = True
                         break
                     if not cards:
                         break
@@ -508,6 +550,14 @@ def fetch_liepin_jobs(keyword, city: str, max_pages: int = None) -> list:
                             "url": j.get("link", ""),
                         })
                     page.wait_for_timeout(500)
+                consecutive_failures = consecutive_failures + 1 if failed else 0
+                if consecutive_failures >= 3:
+                    # 连续失败通常意味着网络出口/风控问题，继续跑只会白等超时
+                    print(
+                        f"⚠️ [猎聘] 连续 {consecutive_failures} 个关键词失败，"
+                        f"跳过剩余 {len(keywords) - idx - 1} 个关键词"
+                    )
+                    break
             browser.close()
     except Exception as e:
         print(f"⚠️ [猎聘] 失败: {e}")
@@ -592,10 +642,7 @@ def fetch_51job_jobs(keyword, city: str, max_pages: int = None) -> list:
         return []
     keywords = [keyword] if isinstance(keyword, str) else list(keyword)
     if max_pages is None:
-        try:
-            max_pages = int(os.getenv("MAX_PAGES") or 3)
-        except ValueError:
-            max_pages = 3
+        max_pages = PAGES
     max_pages = max(1, min(max_pages, 10))
 
     area = JOB51_CITY_CODE.get(city, "")
@@ -959,24 +1006,36 @@ def send_analysis_email(analysis_md: str):
 
 
 if __name__ == "__main__":
-    keywords = expand_keywords(TARGET_JOB)
-    print(f"\n🔎 岗位关键词扩展为 {len(keywords)} 个：{keywords}")
+    keywords = select_keywords(expand_keywords(TARGET_JOB), KEYWORD_LIMIT)
+    print(f"\n🔎 岗位关键词 {len(keywords)} 个：{keywords}")
+    enabled = [SOURCE_LABELS[k] for k in SOURCE_KEYS if k in SOURCES]
+    print(f"🧩 抓取平台（{len(enabled)}）：{'、'.join(enabled)}；每关键词 {PAGES} 页")
+    if not SOURCES:
+        print("⚠️ 没有启用任何数据源，请检查 SOURCES 配置")
 
     all_jobs = []
-    # Playwright 数据源一次启动浏览器，顺序抓取所有扩展关键词
-    all_jobs.extend(fetch_liepin_jobs(keywords, TARGET_CITY))
-    all_jobs.extend(fetch_zhilian_jobs(keywords, TARGET_CITY))
-    all_jobs.extend(fetch_51job_jobs(keywords, TARGET_CITY))
-    # BOSS 直聘（默认只搜原始关键词，避免频繁请求触发风控；需国内 IP）
-    # 可用 BOSS_KEYWORDS_COUNT / BOSS_PAGES 调整搜索广度
-    all_jobs.extend(fetch_boss_jobs(keywords[:max(1, BOSS_KEYWORDS_COUNT)], TARGET_CITY))
-    for keyword in keywords:
-        # requests 数据源逐个关键词抓取
-        all_jobs.extend(fetch_nowcoder_jobs(keyword, TARGET_CITY))
-        # 国外源（远程岗位，城市不做硬过滤）
-        all_jobs.extend(fetch_remoteok_jobs(keyword, TARGET_CITY))
-        all_jobs.extend(fetch_wwr_jobs(keyword, TARGET_CITY))
-        all_jobs.extend(fetch_remotive_jobs(keyword, TARGET_CITY))
+    # Playwright 数据源一次启动浏览器，顺序抓取所有选中关键词
+    if "liepin" in SOURCES:
+        all_jobs.extend(fetch_liepin_jobs(keywords, TARGET_CITY, PAGES))
+    if "zhilian" in SOURCES:
+        # 智联当前只取每个关键词的第一页（页面是 SPA，未实现翻页）
+        all_jobs.extend(fetch_zhilian_jobs(keywords, TARGET_CITY))
+    if "job51" in SOURCES:
+        all_jobs.extend(fetch_51job_jobs(keywords, TARGET_CITY, PAGES))
+    if "boss" in SOURCES:
+        # BOSS 直聘需要国内 IP + 登录态
+        all_jobs.extend(fetch_boss_jobs(keywords, TARGET_CITY, PAGES))
+    if any(k in SOURCES for k in ("nowcoder", "remoteok", "wwr", "remotive")):
+        for keyword in keywords:
+            if "nowcoder" in SOURCES:
+                all_jobs.extend(fetch_nowcoder_jobs(keyword, TARGET_CITY))
+            # 国外源（远程岗位，城市不做硬过滤）
+            if "remoteok" in SOURCES:
+                all_jobs.extend(fetch_remoteok_jobs(keyword, TARGET_CITY))
+            if "wwr" in SOURCES:
+                all_jobs.extend(fetch_wwr_jobs(keyword, TARGET_CITY))
+            if "remotive" in SOURCES:
+                all_jobs.extend(fetch_remotive_jobs(keyword, TARGET_CITY))
 
     all_jobs = dedupe_jobs(all_jobs)
     print(f"\n📊 去重后共 {len(all_jobs)} 条岗位")
