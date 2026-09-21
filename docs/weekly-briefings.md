@@ -3,12 +3,63 @@
 每周一自动跑，用 RSS + 官方接口抓取各自领域的动态，交给 DeepSeek 提炼成中文简报，
 发到邮箱（同时把正文备份到 `output/`、原始条目清单作为附件）。
 
-| Flow | 触发（北京时间） | 领域（只放这个方向的数据源） |
+| Flow | 领域（只放这个方向的数据源） |
+| --- | --- |
+| AIFrontier | AI 模型 / Agent / 多模态：OpenAI、Google、Meta、NVIDIA、HF、arXiv cs.LG/CL/AI/CV… |
+| ChinaTech | 国内科技公司与产业：IT之家、爱范儿、极客公园、钛媒体、量子位、雷峰网、OSCHINA、InfoQ 中文 + 新浪滚动 / 36氪热榜（JSON） |
+| FinFrontier | 金融 / 量化 / 市场：CNBC、MarketWatch、FT、The Economist、美联储、Bloomberg、arXiv q-fin、Quantocracy、QuantPedia、Alpha Architect、CoinDesk… |
+| PerfPulse | 硬件 / 微架构 / 系统 / HPC：Phoronix、LWN、kernel.org、SemiEngineering、EE Times、IEEE Spectrum Chips、Chips and Cheese、Tom's Hardware、TechPowerUp、RISC-V、arXiv cs.AR/DC/PF… |
+
+> 触发时间已改为：**周一至周四每天早上 08:00（北京时间），由本机 Mac mini 触发**，
+> 不再依赖 GitHub 的定时（原因见下一节）。
+
+## 触发方式：本机 launchd（不用 GitHub 定时）
+
+实测本仓库 GitHub Actions 自带的 `schedule` **稳定迟到 4.5–5.5 小时**：
+
+| 计划时间 (UTC) | 实际触发 (UTC) | 延迟 |
 | --- | --- | --- |
-| AIFrontier | 周一 10:00 | AI 模型 / Agent / 多模态：OpenAI、Google、Meta、NVIDIA、HF、arXiv cs.LG/CL/AI/CV… |
-| ChinaTech | 周一 12:00 | 国内科技公司与产业：IT之家、爱范儿、极客公园、钛媒体、量子位、雷峰网、OSCHINA、InfoQ 中文 + 新浪滚动 / 36氪热榜（JSON） |
-| FinFrontier | 周一 11:00 | 金融 / 量化 / 市场：CNBC、MarketWatch、FT、The Economist、美联储、Bloomberg、arXiv q-fin、Quantocracy、QuantPedia、Alpha Architect、CoinDesk… |
-| PerfPulse | 周一 09:00 | 硬件 / 微架构 / 系统 / HPC：Phoronix、LWN、kernel.org、SemiEngineering、EE Times、IEEE Spectrum Chips、Chips and Cheese、Tom's Hardware、TechPowerUp、RISC-V、arXiv cs.AR/DC/PF… |
+| Job Monitor 09-21 00:00 | 04:31 | +4h31m |
+| Job Monitor 09-20 00:00 | 04:33 | +4h33m |
+| PerfPulse 09-21 01:00 | 05:57 | +4h57m |
+| AIFrontier 09-21 02:00 | 07:16 | +5h16m |
+| FinFrontier 09-21 03:00 | 08:26 | +5h26m |
+| ChinaTech 09-21 04:00 | 09:19 | +5h19m |
+
+也就是说「早上 8 点」在 GitHub 上做不到。所以：
+
+- 四个 `*_push.yml` 的 `schedule` 已注释停用（`workflow_dispatch` 保留，手机上仍可手动触发）
+- 改由 Mac mini 上的 launchd 定时，**周一至周四 08:00 本机时区**依次跑四个 flow
+
+```bash
+# 安装（准备独立克隆 ~/briefings + 密钥模板 + LaunchAgent）
+bash scripts/setup_local_scheduler.sh
+
+# 手动跑一次（不用等到 08:00）
+launchctl kickstart -k "gui/$UID/com.jianzhang.briefings"
+
+# 看日志
+tail -f ~/Library/Logs/briefings/$(date +%Y-%m-%d).log
+
+# 暂停 / 恢复
+launchctl bootout "gui/$UID/com.jianzhang.briefings"
+launchctl bootstrap "gui/$UID" ~/Library/LaunchAgents/com.jianzhang.briefings.plist
+```
+
+本机运行需要密钥文件 `~/.config/briefing-secrets.env`（600 权限，不进仓库）：
+
+```bash
+DEEPSEEK_API_KEY=sk-...
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=465
+EMAIL_SENDER=you@gmail.com
+EMAIL_PASSWORD=<Gmail 应用专用密码>
+EMAIL_RECEIVER=you@gmail.com
+```
+
+没填密钥时定时任务只会在日志里提示「缺少密钥」，不会发信、也不会报错刷屏。
+想恢复云端兜底：打开对应 `*_push.yml`，取消 `schedule:` 那两行注释
+（注意会与本机定时重复发信）。
 
 ## 代码结构
 
