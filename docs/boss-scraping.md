@@ -19,21 +19,26 @@
 
 1. 手机打开 **GitHub App**（或浏览器）→ 进入仓库 `DicyZz/dicyzz.github.io`。
 2. **Actions** → 左侧选 **Job Monitor - 招聘信息实时抓取**。
-3. 点右上 **Run workflow**。输入框默认值已经填好，直接点绿色 **Run workflow** 即可：
+3. 点右上 **Run workflow**。只有 3 个输入，默认值都填好了，直接点绿色 **Run workflow** 即可：
 
 | 输入 | 默认 | 含义 |
 | --- | --- | --- |
 | `target_job` | 芯片设计 | 岗位关键词，会自动扩展同义词 |
 | `target_city` | 全国 | 目标城市 |
-| `runner` | **self-hosted** | 默认跑在家里这台 Mac（有国内 IP，能抓 BOSS） |
-| `boss_pages` / `boss_keywords` | 1 / 1 | BOSS 翻页数与关键词个数，调大覆盖更广但更容易触发风控 |
-| `boss_detail` | 0 | 抓取 N 条岗位的详情正文（建议 ≤5） |
-| `boss_headful` | 1 | BOSS 是否显示浏览器窗口；无人值守/锁屏出问题时改 0 |
-| `max_pages` | 3 | 猎聘翻页数 |
+| `target_industry` | 不限 | 行业（下拉选择） |
+
+抓取强度（BOSS 翻页数、关键词个数、是否抓详情、猎聘页数等）不是输入项，
+都写在 workflow 的 `env:` 里，需要时直接改文件即可：
+
+| 变量 | 当前值 | 含义 |
+| --- | --- | --- |
+| `BOSS_PAGES` | 1 | BOSS 翻页数，调大覆盖更广但更容易触发风控 |
+| `BOSS_KEYWORDS_COUNT` | 1 | 用前 N 个扩展关键词搜 BOSS |
+| `BOSS_MAX_DETAIL` | 0 | 抓取详情正文的岗位数（建议 ≤5） |
+| `BOSS_HEADFUL` | 1 | BOSS 显示浏览器窗口（更稳）；无人值守出问题时改 0 |
+| `MAX_PAGES` | 1 | 猎聘翻页数 |
 
 4. 跑完会做两件事：**发邮件**（抓取清单 + 可选的 DeepSeek 分析），并把 `jobs_result.json/md` 上传成 Actions artifact。
-
-> 想临时改成云端跑（抓不到 BOSS，只抓其他源）：把 `runner` 填 `ubuntu-latest`。
 
 ## 服务器（这台 Mac）运维
 
@@ -131,8 +136,8 @@ python -m unittest discover -s tests -v
 | 现象 | 原因与处理 |
 | --- | --- |
 | 手机上点了 Run，但一直卡在 Queued | 这台 Mac 没开机 / 未登录桌面 / runner 挂了：`launchctl list \| grep actions.runner` 检查，必要时 `launchctl kickstart -k "gui/$UID/com.github.actions.runner"` |
-| 报错 `没找到 python3` 或 `actions/setup-python` 失败 | 说明跑在 self-hosted 但机器没装好依赖：重跑 `bash scripts/setup_macmini_runner.sh`；workflow 在 self-hosted 上只检测已有依赖，不会再去联网装 Python |
-| 某个步骤**瞬间失败**（几十毫秒）且日志里没有任何输出 | run 脚本里同时出现了 `${{ }}` 和普通花括号（例如 `${VAR:-}`）：GitHub 会把这类脚本转成 `format()` 求值，非法占位符导致脚本根本没生成。`tests/test_workflows.py` 已加守卫，本地 `python -m unittest discover -s tests` 就能提前拦住 |
+| 报错「没找到 python3」 | 工作机上没有可用的 Python 或依赖缺失：重跑 `bash scripts/setup_macmini_runner.sh`（workflow 会按 `/opt/homebrew/bin/python3` → `python3` 顺序找依赖齐全的解释器，找不到才现装） |
+| 某个步骤**瞬间失败**（几十毫秒）且日志里几乎没有输出 | 多半是 **macOS 的 bash 3.2 多字节解析问题**：run 脚本里 `$VAR` 后面紧跟中文标点（如 `$PY（`）时，bash 在 UTF-8 locale 下会把标点吃进变量名，报 `unbound variable` 后退出。修复：写成 `${VAR}`。`tests/test_workflows.py` 会在本地用 `/bin/bash` + `LANG=en_US.UTF-8` 实跑每个 run 脚本，能提前拦住这类问题 |
 | 日志出现「未登录或被风控，已跳转」 | 登录态过期：在国内 Mac 上重跑 `boss_login.py`；同时看 `boss_debug/` 里的截图与 HTML |
 | 日志出现「接口不可用…回退 DOM 解析」 | 站点接口调整或临时风控；DOM 兜底仍能抓到数据，若长期如此可对比 `boss_debug/` 里的 HTML 更新选择器 |
 | 抓到 0 条但没报风控 | 关键词/城市组合太窄，换更通用的关键词；或把 `BOSS_PAGES` 调到 2 |
