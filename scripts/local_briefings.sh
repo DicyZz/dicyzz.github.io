@@ -30,6 +30,12 @@ exec >>"${LOG_FILE}" 2>&1
 
 echo "===== $(date '+%F %T') 开始跑四个周报 ====="
 
+# 当天已经成功发过信的 flow 会留下标记，避免重复发信
+# （例如手动跑过一次后，08:00 的定时任务会跳过；想强制重跑就删掉对应标记文件）
+TODAY="$(date +%Y-%m-%d)"
+STATE_DIR="${LOG_DIR}/.state"
+mkdir -p "${STATE_DIR}"
+
 if [ ! -f "${SECRETS_FILE}" ]; then
   echo "❌ 缺少密钥文件 ${SECRETS_FILE}"
   echo "   参考 docs/weekly-briefings.md 填写后重试"
@@ -67,16 +73,27 @@ echo "→ 拉取最新代码（失败则用本地代码继续）"
 /usr/bin/git pull --ff-only --quiet || echo "⚠️ git pull 失败，使用当前代码"
 
 failed=0
+skipped=0
 for flow in "${FLOWS[@]}"; do
+  marker="${STATE_DIR}/${TODAY}-${flow}.ok"
+  if [ -f "${marker}" ]; then
+    echo "⏭  ${flow} 今天（${TODAY}）已成功跑过，跳过"
+    skipped=$((skipped + 1))
+    continue
+  fi
   echo ""
   echo "----- ${flow} 开始 $(date '+%T') -----"
   "${PYTHON}" "scripts/${flow}_push.py"
   code=$?
   echo "----- ${flow} 结束 exit=${code} $(date '+%T') -----"
-  [ "${code}" -ne 0 ] && failed=$((failed + 1))
+  if [ "${code}" -eq 0 ]; then
+    touch "${marker}"
+  else
+    failed=$((failed + 1))
+  fi
 done
 
 echo ""
-echo "===== 全部结束：4 个 flow，失败 ${failed} 个，$(date '+%F %T') ====="
+echo "===== 全部结束：4 个 flow，跳过 ${skipped} 个，失败 ${failed} 个，$(date '+%F %T') ====="
 echo "日志：${LOG_FILE}"
 exit 0
