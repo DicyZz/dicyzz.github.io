@@ -25,6 +25,7 @@ import os
 import re
 import smtplib
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from email import encoders
@@ -42,12 +43,22 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 )
 
+# 只带 User-Agent 会被不少站点（Cloudflare 前置）判为爬虫直接 403；
+# 补上浏览器的 Accept / Accept-Language 后，量子位等源即可正常返回。
+DEFAULT_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "application/rss+xml, application/atom+xml, application/xml;q=0.9, "
+              "text/html;q=0.8, */*;q=0.7",
+    "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+}
+
 # 单源抓取参数
 DEFAULT_MAX_ITEMS_PER_SOURCE = 6
 DEFAULT_MAX_HOURS = 168          # 7 天
 DEFAULT_TIMEOUT = 15             # 秒（原实现是 8 秒，对慢源太紧）
 DEFAULT_WORKERS = 24
 MAX_UNDATED_PER_SOURCE = 1       # 没写发布时间的条目，每个源最多收几条
+FETCH_ATTEMPTS = 2               # 网络抖动（SSL/超时）重试次数
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +103,8 @@ def is_recent(published: datetime | None, max_hours: int = DEFAULT_MAX_HOURS) ->
 def normalize_title(title: str) -> str:
     """标题标准化：去标签、去空白、去标点，用于跨源去重。"""
     text = re.sub(r"<[^>]+>", " ", title or "")
-    text = re.sub(r"[\s\-—_·|:：,，.。!！?？'\"]+", "", text)
+    # 中英文标点都要去掉：同一篇报道在不同源的标题常只差标点
+    text = re.sub(r"[\s\-—_·|:：;；,，、.。!！?？'\"“”‘’()（）\[\]【】《》]+", "", text)
     return text.lower()
 
 
@@ -147,15 +159,28 @@ def fetch_source(source_name: str, feed_url: str, category: str,
     if not feed_url.startswith("http"):
         feed_url = "https://" + feed_url
     http = session or requests
-    try:
-        resp = http.get(feed_url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
-        if resp.status_code != 200:
-            return [], f"HTTP {resp.status_code}"
-        feed = feedparser.parse(resp.content)
-        if not feed.entries:
-            return [], "空feed"
-    except Exception as e:
-        return [], f"异常:{type(e).__name__}"
+
+    last_error = ""
+    feed = None
+    for attempt in range(FETCH_ATTEMPTS):
+        try:
+            resp = http.get(feed_url, headers=DEFAULT_HEADERS, timeout=timeout)
+            if resp.status_code != 200:
+                last_error = f"HTTP {resp.status_code}"
+                # 403/404 重试通常没用，直接停
+                if 400 <= resp.status_code < 500:
+                    return [], last_error
+                continue
+            feed = feedparser.parse(resp.content)
+            if not feed.entries:
+                return [], "空feed"
+            break
+        except Exception as e:
+            last_error = f"异常:{type(e).__name__}"
+            if attempt + 1 < FETCH_ATTEMPTS:
+                time.sleep(1.5)  # 网络抖动（SSL/超时）值得再试一次
+    if feed is None:
+        return [], last_error
 
     items, undated = [], 0
     for entry in feed.entries:
@@ -190,6 +215,7 @@ def is_broken(note: str) -> bool:
 
 def collect(module_feeds: dict, extra_items: list | None = None,
             max_items_per_source: int = DEFAULT_MAX_ITEMS_PER_SOURCE,
+            category_max_items: dict | None = None,
             max_hours: int = DEFAULT_MAX_HOURS,
             timeout: int = DEFAULT_TIMEOUT,
             workers: int = DEFAULT_WORKERS) -> tuple:
@@ -198,6 +224,7 @@ def collect(module_feeds: dict, extra_items: list | None = None,
     Args:
         module_feeds: {分类: {源名: feed_url}}
         extra_items: 额外条目（例如 JSON 接口抓来的），会一起参与去重与统计
+        category_max_items: 按分类覆盖每源条数上限（各 flow 原本的差异化配置）
     """
     items = list(extra_items or [])
     stats = {
@@ -212,11 +239,14 @@ def collect(module_feeds: dict, extra_items: list | None = None,
     with requests.Session() as session, ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {}
         for category, feeds in module_feeds.items():
+            cap = max_items_per_source
+            if category_max_items:
+                cap = category_max_items.get(category, cap)
             for source_name, feed_url in feeds.items():
                 stats["sources"] += 1
                 futures[pool.submit(
                     fetch_source, source_name, feed_url, category,
-                    max_items_per_source, max_hours, timeout, session,
+                    cap, max_hours, timeout, session,
                 )] = source_name
         for future in as_completed(futures):
             source_name = futures[future]

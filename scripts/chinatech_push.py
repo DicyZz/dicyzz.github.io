@@ -1,18 +1,13 @@
 import os
 import sys
-import re
-import time
-import smtplib
-from datetime import datetime, timedelta, timezone
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import requests
-import feedparser
-import markdown
-from premailer import transform
+from datetime import datetime
+
 from openai import OpenAI
 
+# 并发抓取 / 去重 / 渲染 / 发送等通用能力见 scripts/digest_common.py
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import digest_common as digest  # noqa: E402
 # ---------------------------------------------------------------------------
 # 读取环境变量
 # ---------------------------------------------------------------------------
@@ -74,208 +69,67 @@ JSON_FEEDS = {
     ],
 }
 
-def is_recent_ts(ts, max_hours=168):
-    """按秒/毫秒时间戳判断是否在最近 max_hours 内"""
-    if not ts:
-        return True
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# 1. 抓取本 flow 的专属数据源（RSS + JSON 接口）
+# ---------------------------------------------------------------------------
+
+def _fetch_json_source(config, category, max_items=3, timeout=digest.DEFAULT_TIMEOUT):
+    """JSON 接口源（新浪滚动 / 36氪热榜）→ 统一格式条目。"""
+    name = config.get("name", "JSON源")
+    kind, url = config.get("type"), config.get("url")
+    headers = {"User-Agent": digest.USER_AGENT, "Content-Type": "application/json"}
     try:
-        ts = float(ts)
-        if ts > 1e12:  # 毫秒
-            ts = ts / 1000.0
-        pub_time = datetime.fromtimestamp(ts, tz=timezone.utc)
-        now_time = datetime.now(timezone.utc)
-        return (now_time - pub_time) <= timedelta(hours=max_hours)
-    except Exception:
-        return True
-
-
-def fetch_json_source(source_config, category, max_items=6):
-    """抓取 JSON 接口源，规整成与 RSS 相同的条目文本格式"""
-    source_name = source_config.get("name", "JSON源")
-    source_type = source_config.get("type")
-    url = source_config.get("url")
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ChinaTechBot/1.0',
-        'Content-Type': 'application/json',
-    }
-
-    try:
-        if source_type == "sina_roll":
-            resp = requests.get(url, headers=headers, timeout=8)
-            if resp.status_code != 200:
-                print(f"⚠️ JSON 源抓取失败 [{source_name}] 状态码 {resp.status_code}")
-                return []
-            data = resp.json()
-            entries = data.get("result", {}).get("data", [])
-            fetched = []
-            count = 0
+        if kind == "sina_roll":
+            resp = requests.get(url, headers=headers, timeout=timeout)
+            entries = resp.json().get("result", {}).get("data", []) if resp.status_code == 200 else []
+            pairs = [((e.get("title") or "").strip(), (e.get("url") or "").strip(), e.get("intro") or "")
+                     for e in entries]
+        elif kind == "36kr_hot":
+            resp = requests.post(url, headers=headers, timeout=timeout,
+                                 json={"partner_id": "web", "timestamp": 0,
+                                       "param": {"siteId": 1, "platformId": 2}})
+            entries = resp.json().get("data", {}).get("hotRankList", []) if resp.status_code == 200 else []
+            pairs = []
             for e in entries:
-                if count >= max_items:
-                    break
-                title = (e.get("title") or "").strip()
-                link = (e.get("url") or "").strip()
-                summary = clean_html_summary(e.get("intro") or "")
-                if not title or not link:
-                    continue
-                if not is_recent_ts(e.get("ctime"), max_hours=168):
-                    continue
-                fetched.append(
-                    f"【模块: {category} | 平台源: {source_name}】\n"
-                    f"标题: {title}\n"
-                    f"链接: {link}\n"
-                    f"摘要: {summary}\n"
-                )
-                count += 1
-            return fetched
-
-        elif source_type == "36kr_hot":
-            resp = requests.post(
-                url,
-                headers=headers,
-                json={"partner_id": "web", "timestamp": 0, "param": {"siteId": 1, "platformId": 2}},
-                timeout=8,
-            )
-            if resp.status_code != 200:
-                print(f"⚠️ JSON 源抓取失败 [{source_name}] 状态码 {resp.status_code}")
-                return []
-            data = resp.json()
-            entries = data.get("data", {}).get("hotRankList", [])
-            fetched = []
-            count = 0
-            for e in entries:
-                if count >= max_items:
-                    break
-                tm = e.get("templateMaterial", {}) or {}
+                tm = e.get("templateMaterial") or {}
                 item_id = e.get("itemId")
-                title = (tm.get("widgetTitle") or "").strip()
-                if not title or not item_id:
-                    continue
-                if not is_recent_ts(tm.get("publishTime"), max_hours=168):
-                    continue
-                link = f"https://36kr.com/p/{item_id}"
-                read_count = tm.get("statRead")
-                summary = f"36氪热榜，阅读量约 {read_count}" if read_count else ""
-                fetched.append(
-                    f"【模块: {category} | 平台源: {source_name}】\n"
-                    f"标题: {title}\n"
-                    f"链接: {link}\n"
-                    f"摘要: {summary}\n"
-                )
-                count += 1
-            return fetched
-
+                reads = tm.get("statRead")
+                pairs.append(((tm.get("widgetTitle") or "").strip(),
+                              f"https://36kr.com/p/{item_id}" if item_id else "",
+                              f"36氪热榜，阅读量约 {reads}" if reads else ""))
         else:
-            print(f"⚠️ 未知 JSON 源类型 [{source_name}] {source_type}")
+            print(f"⚠️ 未知 JSON 源类型 [{name}] {kind}")
             return []
-
     except Exception as e:
-        print(f"⚠️ JSON 源抓取异常 [{source_name}] {type(e).__name__}: {e}")
+        print(f"⚠️ JSON 源抓取异常 [{name}] {type(e).__name__}: {e}")
         return []
 
+    items = [digest.make_item(category, name, t, u, s) for t, u, s in pairs if t and u]
+    return items[:max_items]
 
-def clean_html_summary(html_text):
-    """清洗 HTML 标签，提炼纯文本"""
-    if not html_text:
-        return ""
-    clean_text = re.sub(r'<[^>]+>', ' ', html_text)
-    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-    return clean_text[:400]
-
-def is_recent_entry(entry, max_hours=168):
-    """检查文章是否在最近 max_hours 小时内发布"""
-    published_struct = entry.get("published_parsed") or entry.get("updated_parsed")
-    if not published_struct:
-        return True
-    try:
-        pub_time = datetime.fromtimestamp(time.mktime(published_struct), tz=timezone.utc)
-        now_time = datetime.now(timezone.utc)
-        return (now_time - pub_time) <= timedelta(hours=max_hours)
-    except Exception:
-        return True
-
-def fetch_single_feed(source_name, feed_url, category, max_items=6):
-    """单源抓取函数（增加超时与 7 天时间过滤）"""
-    if not feed_url.startswith("http"):
-        feed_url = "https://" + feed_url
-
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ChinaTechBot/1.0'}
-    
-    try:
-        resp = requests.get(feed_url, headers=headers, timeout=8)
-        if resp.status_code != 200:
-            print(f"⚠️ 源抓取失败 [{source_name}] 状态码 {resp.status_code}")
-            return []
-        
-        feed = feedparser.parse(resp.content)
-        fetched_items = []
-        count = 0
-
-        for entry in feed.entries:
-            if not is_recent_entry(entry, max_hours=168):
-                continue
-
-            if count >= max_items:
-                break
-
-            title = entry.get("title", "").strip()
-            link = entry.get("link", "").strip()
-            summary = clean_html_summary(entry.get("summary", entry.get("description", "")))
-            
-            if title:
-                fetched_items.append(
-                    f"【模块: {category} | 平台源: {source_name}】\n"
-                    f"标题: {title}\n"
-                    f"链接: {link}\n"
-                    f"摘要: {summary}\n"
-                )
-                count += 1
-        return fetched_items
-    except Exception as e:
-        print(f"⚠️ 源抓取异常 [{source_name}] {type(e).__name__}: {e}")
-        return []
 
 def fetch_all_feeds():
-    """并发并行抓取全量 RSS 订阅点"""
-    print("1. 正在通过并发线程池拉取国内科技媒体数据源（含超时控制与 7 天过滤）...")
-    raw_articles = []
-
-    with ThreadPoolExecutor(max_workers=25) as executor:
-        future_to_source = {}
-        for category, feeds in MODULE_FEEDS.items():
-            max_items = CATEGORY_MAX_ITEMS.get(category, 6)
-            for source_name, feed_url in feeds.items():
-                future = executor.submit(fetch_single_feed, source_name, feed_url, category, max_items=max_items)
-                future_to_source[future] = source_name
-
-        for category, json_sources in JSON_FEEDS.items():
-            max_items = CATEGORY_MAX_ITEMS.get(category, 6)
-            for cfg in json_sources:
-                future = executor.submit(fetch_json_source, cfg, category, max_items=max_items)
-                future_to_source[future] = cfg.get("name", "JSON源")
-
-        for future in as_completed(future_to_source):
-            items = future.result()
-            if items:
-                raw_articles.extend(items)
-
-    if not raw_articles:
-        print("⚠️ 未抓取到 7 天内的新资讯，将使用保底逻辑。")
-        return "本周暂无 7 天内的新动态更新。"
-
-    print(f"✅ 成功从权威源中抓取并筛选出 {len(raw_articles)} 条最新资讯！")
-    return "\n---\n".join(raw_articles)
+    """并发抓取 RSS + JSON 源（7 天时间窗 + 跨源去重），返回 (条目, 统计)。"""
+    max_items = CATEGORY_MAX_ITEMS.get("Tech_News", digest.DEFAULT_MAX_ITEMS_PER_SOURCE)
+    json_items = [
+        item
+        for category, sources in JSON_FEEDS.items()
+        for config in sources
+        for item in _fetch_json_source(config, category, max_items=max_items)
+    ]
+    return digest.collect(MODULE_FEEDS, extra_items=json_items, max_items_per_source=max_items)
 
 
-# ---------------------------------------------------------------------------
 # 2. DeepSeek 生成文字简报
 # ---------------------------------------------------------------------------
-def generate_briefing():
-    real_news_context = fetch_all_feeds()
+def generate_briefing(items, stats):
+    real_news_context = digest.build_context(items)
 
     print("2. 正在通过 DeepSeek 提炼专业技术简报...")
     if not DEEPSEEK_API_KEY:
-        print("❌ 错误：未配置 DEEPSEEK_API_KEY！")
-        sys.exit(1)
+        print("⚠️ 未配置 DEEPSEEK_API_KEY，改为发送原始条目")
+        return None
 
     client = OpenAI(
         api_key=DEEPSEEK_API_KEY,
@@ -373,145 +227,56 @@ def generate_briefing():
         print("✅ 多源简报文字生成成功！")
         return md_content.strip()
     except Exception as e:
-        print(f"❌ DeepSeek 生成失败: {str(e)}")
-        sys.exit(1)
+        print(f"⚠️ DeepSeek 生成失败: {e}，改为发送原始条目")
+        return None
 
 
 # ---------------------------------------------------------------------------
 # 3. 邮件渲染与发送 (已移除 MP3 附件逻辑)
+
+
 # ---------------------------------------------------------------------------
-def save_briefing_backup(md_content, today_date):
-    out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
-    os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, f"chinatech_{today_date}.md")
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write(md_content)
-    print(f"💾 简报 Markdown 已备份：{out_path}")
-    return out_path
+# 3. 备份 / 渲染 / 发送（通用实现见 scripts/digest_common.py）
+# ---------------------------------------------------------------------------
+FLOW_NAME = "chinatech"
+SUBJECT = "【ChinaTech】国内科技公司动态简报"
+BRAND_TITLE = "🇨🇳 ChinaTech 国内科技公司动态简报"
+SUBTITLE = "国内科技公司动态严谨跟踪"
+FOOTER = "基于顶级数据源 & DeepSeek 零幻觉模式构建"
+BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
 
 
-def send_email(subject, md_content):
-    print("3. 正在渲染适配邮件样式的 HTML 正文...")
-
-    today_date = datetime.now().strftime("%Y-%m-%d")
-    save_briefing_backup(md_content, today_date)
-
-    sender = EMAIL_SENDER.strip() if EMAIL_SENDER else ""
-    receiver = EMAIL_RECEIVER.strip() if EMAIL_RECEIVER else sender
-
-    if not sender or not EMAIL_PASSWORD:
-        print("❌ 错误：缺少邮箱环境变量配置！")
-        sys.exit(1)
-
-    raw_html = markdown.markdown(
-        md_content,
-        extensions=['tables', 'fenced_code', 'codehilite', 'nl2br', 'toc']
+def fallback_markdown(items, stats):
+    """DeepSeek 不可用时也照常发信：附上本期扫描到的原始条目，保证每次都有产出。"""
+    return (
+        "# 本期未生成 AI 简报\n\n"
+        "> 未配置 DEEPSEEK_API_KEY 或模型返回空内容，以下是本期扫描到的原始条目，供直接查阅。\n\n"
+        + digest.items_to_markdown(items, title=f"{FLOW_NAME} 本期条目")
     )
 
-    styled_html = f"""
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    *, *:before, *:after {{ box-sizing: border-box !important; }}
-    body {{
-      font-family: -apple-system-font, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", Arial, sans-serif;
-      background-color: #ffffff;
-      color: #24292e;
-      margin: 0;
-      padding: 0;
-      width: 100% !important;
-    }}
-    .container {{
-      width: 100% !important;
-      margin: 0 auto;
-      background: #ffffff;
-    }}
-    .header {{
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-      color: #ffffff;
-      padding: 24px 16px;
-      border-bottom: 3px solid #6366f1;
-    }}
-    .header h1 {{ margin: 0; font-size: 20px; font-weight: 700; color: #ffffff; }}
-    .header .subtitle {{ margin-top: 10px; font-size: 12px; color: #a5b4fc; }}
-    .content {{ padding: 16px 12px; font-size: 15px; line-height: 1.75; color: #334155; }}
-    h2 {{
-      color: #0f172a;
-      font-size: 17px;
-      background: #f1f5f9;
-      border-left: 4px solid #4f46e5;
-      padding: 8px 12px;
-      margin-top: 36px;
-      margin-bottom: 20px;
-    }}
-    h3 {{ font-size: 16px; color: #0f172a; margin-top: 28px; margin-bottom: 12px; font-weight: 600; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }}
-    p {{ margin: 12px 0 16px 0; color: #334155; line-height: 1.75; text-align: justify; }}
-    a {{ color: #4f46e5 !important; text-decoration: none !important; font-weight: 500 !important; border-bottom: 1px dashed #6366f1 !important; }}
-    code {{ background-color: #f1f5f9; color: #4f46e5; padding: 2px 5px; border-radius: 4px; font-size: 88%; font-weight: 600; }}
-    pre {{
-      background-color: #0f172a !important;
-      color: #f8fafc !important;
-      padding: 14px !important;
-      border-radius: 6px !important;
-      overflow-x: auto !important;
-      font-size: 12px !important;
-      line-height: 1.6 !important;
-      margin: 16px 0 !important;
-    }}
-    pre code {{ background-color: transparent !important; color: #f8fafc !important; padding: 0 !important; }}
-    blockquote {{ margin: 20px 0; padding: 12px 14px; color: #1e293b; border-left: 4px solid #4f46e5; background-color: #f8fafc; font-size: 14px; }}
-    .footer {{ background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 12px; text-align: center; font-size: 12px; color: #94a3b8; }}
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>🇨🇳 ChinaTech 国内科技公司动态简报</h1>
-      <div class="subtitle">发布日期：{today_date} | 国内科技公司动态严谨跟踪</div>
-    </div>
-    <div class="content">
-      {raw_html}
-    </div>
-    <div class="footer">
-      基于顶级数据源 & DeepSeek 零幻觉模式构建
-    </div>
-  </div>
-</body>
-</html>
-"""
 
-    print("4. 正在进行 CSS 内联化转换并发送邮件...")
-    inlined_html = transform(styled_html)
+def main():
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    items, stats = fetch_all_feeds()
 
-    message = MIMEMultipart()
-    message["From"] = sender
-    message["To"] = receiver
-    message["Subject"] = f"{subject} ({today_date})"
+    md_content = generate_briefing(items, stats)
+    if not md_content:
+        print("⚠️ 未生成 AI 简报，改为发送原始条目清单")
+        md_content = fallback_markdown(items, stats)
 
-    message.attach(MIMEText(inlined_html, "html", "utf-8"))
+    digest.save_backup(md_content, date_str,
+                       os.path.join(BACKUP_DIR, f"{FLOW_NAME}_{date_str}.md"))
 
-    try:
-        if EMAIL_PORT == 465:
-            server = smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, timeout=20)
-        else:
-            server = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=20)
-            server.starttls()
-
-        server.login(sender, EMAIL_PASSWORD.strip())
-        server.sendmail(sender, [receiver], message.as_string())
-        server.quit()
-        print("🎉 简报正文已成功发送至邮箱！")
-    except Exception as e:
-        print(f"❌ 邮件发送失败: {str(e)}")
-        sys.exit(1)
+    html, plain_text = digest.render_email(
+        brand_title=BRAND_TITLE, subtitle=SUBTITLE, footer=FOOTER,
+        markdown_text=md_content, stats=stats, date_str=date_str,
+    )
+    ok = digest.send_email(
+        f"{SUBJECT} ({date_str})", html, plain_text,
+        attachments=[(f"{FLOW_NAME}-{date_str}-items.md", digest.items_to_markdown(items))],
+    )
+    sys.exit(0 if ok else 1)
 
 
-# ---------------------------------------------------------------------------
-# 主流程入口
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    md_content = generate_briefing()
-    send_email("【ChinaTech】国内科技公司动态简报", md_content)
+    main()

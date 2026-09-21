@@ -40,3 +40,6 @@ data/boss_cookies.json
 boss_debug/
 unit-tests.log
 analysis.log
+
+# 周报 flow 的本地备份（output/perfpulse_2026-09-22.md 之类）
+output/

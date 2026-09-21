@@ -1,18 +1,12 @@
 import os
 import sys
-import re
-import time
-import smtplib
-from datetime import datetime, timedelta, timezone
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import requests
-import feedparser
-import markdown
-from premailer import transform
+from datetime import datetime
+
 from openai import OpenAI
 
+# 并发抓取 / 去重 / 渲染 / 发送等通用能力见 scripts/digest_common.py
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import digest_common as digest  # noqa: E402
 # ---------------------------------------------------------------------------
 # 读取环境变量
 # ---------------------------------------------------------------------------
@@ -43,14 +37,14 @@ MODULE_FEEDS = {
     # === 新闻与发布 (实验室与大厂官方) ===
     "News": {
         "OpenAI News": "https://openai.com/news/rss.xml",
-        "Anthropic News": "https://www.anthropic.com/feed.xml",
+        "Google Blog (AI)": "https://blog.google/technology/ai/rss/",
         "Google DeepMind Blog": "https://deepmind.google/blog/rss.xml",
         "Google AI Blog": "https://research.google/blog/rss/",
-        "Meta AI Research": "https://ai.meta.com/blog/rss/",
+        "Meta Engineering": "https://engineering.fb.com/feed/",
         "Microsoft Research Blog": "https://www.microsoft.com/en-us/research/feed/",
         "Hugging Face Blog": "https://huggingface.co/blog/feed.xml",
         "Google Developers Blog (Gemini)": "https://developers.googleblog.com/feeds/posts/default",
-        "NVIDIA Developer AI Blog": "https://developer.nvidia.com/blog/category/ai-deep-learning/feed/",
+        "NVIDIA Developer Blog": "https://developer.nvidia.com/blog/feed/",
         "Apple Machine Learning Research": "https://machinelearning.apple.com/rss.xml",
         "AWS Machine Learning Blog": "https://aws.amazon.com/blogs/machine-learning/feed/",
     },
@@ -59,7 +53,7 @@ MODULE_FEEDS = {
     "Blog_Posts": {
         "Lil'Log (Lilian Weng)": "https://lilianweng.github.io/index.xml",
         "BAIR (Berkeley AI Research)": "https://bair.berkeley.edu/blog/feed.xml",
-        "LMSYS Org Blog (Chatbot Arena)": "https://lmsys.org/blog/feed.xml",
+        "Together AI Blog": "https://www.together.ai/blog/rss.xml",
         "The Gradient": "https://thegradient.pub/rss/",
         "Import AI (Jack Clark)": "https://jack-clark.net/feed/",
         "Jay Alammar Blog": "https://jalammar.github.io/feed.xml",
@@ -78,7 +72,7 @@ MODULE_FEEDS = {
         "ArXiv Computer Vision (cs.CV)": "http://export.arxiv.org/api/query?search_query=cat:cs.CV&sortBy=submittedDate&sortOrder=descending&max_results=20",
         "ArXiv Sound/Audio (cs.SD)": "http://export.arxiv.org/api/query?search_query=cat:cs.SD&sortBy=submittedDate&sortOrder=descending&max_results=20",
         "ArXiv Robotics (cs.RO)": "http://export.arxiv.org/api/query?search_query=cat:cs.RO&sortBy=submittedDate&sortOrder=descending&max_results=20",
-        "Papers With Code Latest Trends": "https://paperswithcode.com/rss/latest",
+        "Databricks Blog": "https://www.databricks.com/feed",
     },
 
     # === 其他资料（核心开源生态发布） ===
@@ -97,103 +91,26 @@ MODULE_FEEDS = {
     }
 }
 
-def clean_html_summary(html_text):
-    """清洗 HTML 标签，提炼纯文本"""
-    if not html_text:
-        return ""
-    clean_text = re.sub(r'<[^>]+>', ' ', html_text)
-    clean_text = re.sub(r'\s+', ' ', clean_text).strip()
-    return clean_text[:400]
-
-def is_recent_entry(entry, max_hours=168):
-    """检查文章是否在最近 max_hours 小时内发布"""
-    published_struct = entry.get("published_parsed") or entry.get("updated_parsed")
-    if not published_struct:
-        return True
-    try:
-        pub_time = datetime.fromtimestamp(time.mktime(published_struct), tz=timezone.utc)
-        now_time = datetime.now(timezone.utc)
-        return (now_time - pub_time) <= timedelta(hours=max_hours)
-    except Exception:
-        return True
-
-def fetch_single_feed(source_name, feed_url, category, max_items=6):
-    """单源抓取函数（增加超时与 7 天时间过滤）"""
-    if not feed_url.startswith("http"):
-        feed_url = "https://" + feed_url
-
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) PerfPulseBot/1.0'}
-    
-    try:
-        resp = requests.get(feed_url, headers=headers, timeout=8)
-        if resp.status_code != 200:
-            print(f"⚠️ 源抓取失败 [{source_name}] 状态码 {resp.status_code}")
-            return []
-        
-        feed = feedparser.parse(resp.content)
-        fetched_items = []
-        count = 0
-
-        for entry in feed.entries:
-            if not is_recent_entry(entry, max_hours=168):
-                continue
-
-            if count >= max_items:
-                break
-
-            title = entry.get("title", "").strip()
-            link = entry.get("link", "").strip()
-            summary = clean_html_summary(entry.get("summary", entry.get("description", "")))
-            
-            if title:
-                fetched_items.append(
-                    f"【模块: {category} | 平台源: {source_name}】\n"
-                    f"标题: {title}\n"
-                    f"链接: {link}\n"
-                    f"摘要: {summary}\n"
-                )
-                count += 1
-        return fetched_items
-    except Exception as e:
-        print(f"⚠️ 源抓取异常 [{source_name}] {type(e).__name__}: {e}")
-        return []
-
-def fetch_all_feeds():
-    """并发并行抓取全量 RSS 订阅点"""
-    print("1. 正在通过并发线程池拉取全球技术数据源（含超时控制与 7 天过滤）...")
-    raw_articles = []
-    
-    with ThreadPoolExecutor(max_workers=25) as executor:
-        future_to_source = {}
-        for category, feeds in MODULE_FEEDS.items():
-            max_items = CATEGORY_MAX_ITEMS.get(category, 6)
-            for source_name, feed_url in feeds.items():
-                future = executor.submit(fetch_single_feed, source_name, feed_url, category, max_items=max_items)
-                future_to_source[future] = source_name
-
-        for future in as_completed(future_to_source):
-            items = future.result()
-            if items:
-                raw_articles.extend(items)
-
-    if not raw_articles:
-        print("⚠️ 未抓取到 7 天内的新资讯，将使用保底逻辑。")
-        return "本周暂无 7 天内的新动态更新。"
-
-    print(f"✅ 成功从权威源中抓取并筛选出 {len(raw_articles)} 条最新资讯！")
-    return "\n---\n".join(raw_articles)
-
-
 # ---------------------------------------------------------------------------
+# 1. 抓取本 flow 的专属数据源
+# ---------------------------------------------------------------------------
+def fetch_all_feeds():
+    """并发抓取全部源（7 天时间窗 + 跨源去重），返回 (条目, 统计)。
+
+    每源条数上限沿用各板块原来的差异化配置 CATEGORY_MAX_ITEMS。
+    """
+    return digest.collect(MODULE_FEEDS, category_max_items=CATEGORY_MAX_ITEMS)
+
+
 # 2. DeepSeek 生成文字简报
 # ---------------------------------------------------------------------------
-def generate_briefing():
-    real_news_context = fetch_all_feeds()
+def generate_briefing(items, stats):
+    real_news_context = digest.build_context(items)
 
     print("2. 正在通过 DeepSeek 提炼专业技术简报...")
     if not DEEPSEEK_API_KEY:
-        print("❌ 错误：未配置 DEEPSEEK_API_KEY！")
-        sys.exit(1)
+        print("⚠️ 未配置 DEEPSEEK_API_KEY，改为发送原始条目")
+        return None
 
     client = OpenAI(
         api_key=DEEPSEEK_API_KEY,
@@ -291,145 +208,56 @@ def generate_briefing():
         print("✅ 多源简报文字生成成功！")
         return md_content.strip()
     except Exception as e:
-        print(f"❌ DeepSeek 生成失败: {str(e)}")
-        sys.exit(1)
+        print(f"⚠️ DeepSeek 生成失败: {e}，改为发送原始条目")
+        return None
 
 
 # ---------------------------------------------------------------------------
 # 3. 邮件渲染与发送 (已移除 MP3 附件逻辑)
+
+
 # ---------------------------------------------------------------------------
-def save_briefing_backup(md_content, today_date):
-    out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
-    os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, f"aifrontier_{today_date}.md")
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write(md_content)
-    print(f"💾 简报 Markdown 已备份：{out_path}")
-    return out_path
+# 3. 备份 / 渲染 / 发送（通用实现见 scripts/digest_common.py）
+# ---------------------------------------------------------------------------
+FLOW_NAME = "aifrontier"
+SUBJECT = "【AIFrontier】每周 AI 模型、Agent 与多模态简报"
+BRAND_TITLE = "🤖 AIFrontier 每周 AI 模型、Agent 与多模态简报"
+SUBTITLE = "AI 模型、Agent 与多模态前沿严谨跟踪"
+FOOTER = "基于顶级数据源 & DeepSeek 零幻觉模式构建"
+BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
 
 
-def send_email(subject, md_content):
-    print("3. 正在渲染适配邮件样式的 HTML 正文...")
-
-    today_date = datetime.now().strftime("%Y-%m-%d")
-    save_briefing_backup(md_content, today_date)
-
-    sender = EMAIL_SENDER.strip() if EMAIL_SENDER else ""
-    receiver = EMAIL_RECEIVER.strip() if EMAIL_RECEIVER else sender
-
-    if not sender or not EMAIL_PASSWORD:
-        print("❌ 错误：缺少邮箱环境变量配置！")
-        sys.exit(1)
-
-    raw_html = markdown.markdown(
-        md_content,
-        extensions=['tables', 'fenced_code', 'codehilite', 'nl2br', 'toc']
+def fallback_markdown(items, stats):
+    """DeepSeek 不可用时也照常发信：附上本期扫描到的原始条目，保证每次都有产出。"""
+    return (
+        "# 本期未生成 AI 简报\n\n"
+        "> 未配置 DEEPSEEK_API_KEY 或模型返回空内容，以下是本期扫描到的原始条目，供直接查阅。\n\n"
+        + digest.items_to_markdown(items, title=f"{FLOW_NAME} 本期条目")
     )
 
-    styled_html = f"""
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    *, *:before, *:after {{ box-sizing: border-box !important; }}
-    body {{
-      font-family: -apple-system-font, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", Arial, sans-serif;
-      background-color: #ffffff;
-      color: #24292e;
-      margin: 0;
-      padding: 0;
-      width: 100% !important;
-    }}
-    .container {{
-      width: 100% !important;
-      margin: 0 auto;
-      background: #ffffff;
-    }}
-    .header {{
-      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-      color: #ffffff;
-      padding: 24px 16px;
-      border-bottom: 3px solid #6366f1;
-    }}
-    .header h1 {{ margin: 0; font-size: 20px; font-weight: 700; color: #ffffff; }}
-    .header .subtitle {{ margin-top: 10px; font-size: 12px; color: #a5b4fc; }}
-    .content {{ padding: 16px 12px; font-size: 15px; line-height: 1.75; color: #334155; }}
-    h2 {{
-      color: #0f172a;
-      font-size: 17px;
-      background: #f1f5f9;
-      border-left: 4px solid #4f46e5;
-      padding: 8px 12px;
-      margin-top: 36px;
-      margin-bottom: 20px;
-    }}
-    h3 {{ font-size: 16px; color: #0f172a; margin-top: 28px; margin-bottom: 12px; font-weight: 600; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }}
-    p {{ margin: 12px 0 16px 0; color: #334155; line-height: 1.75; text-align: justify; }}
-    a {{ color: #4f46e5 !important; text-decoration: none !important; font-weight: 500 !important; border-bottom: 1px dashed #6366f1 !important; }}
-    code {{ background-color: #f1f5f9; color: #4f46e5; padding: 2px 5px; border-radius: 4px; font-size: 88%; font-weight: 600; }}
-    pre {{
-      background-color: #0f172a !important;
-      color: #f8fafc !important;
-      padding: 14px !important;
-      border-radius: 6px !important;
-      overflow-x: auto !important;
-      font-size: 12px !important;
-      line-height: 1.6 !important;
-      margin: 16px 0 !important;
-    }}
-    pre code {{ background-color: transparent !important; color: #f8fafc !important; padding: 0 !important; }}
-    blockquote {{ margin: 20px 0; padding: 12px 14px; color: #1e293b; border-left: 4px solid #4f46e5; background-color: #f8fafc; font-size: 14px; }}
-    .footer {{ background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 12px; text-align: center; font-size: 12px; color: #94a3b8; }}
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>🤖 AIFrontier 每周 AI 模型、Agent 与多模态简报</h1>
-      <div class="subtitle">发布日期：{today_date} | AI 模型、Agent 与多模态前沿严谨跟踪</div>
-    </div>
-    <div class="content">
-      {raw_html}
-    </div>
-    <div class="footer">
-      基于顶级数据源 & DeepSeek 零幻觉模式构建
-    </div>
-  </div>
-</body>
-</html>
-"""
 
-    print("4. 正在进行 CSS 内联化转换并发送邮件...")
-    inlined_html = transform(styled_html)
+def main():
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    items, stats = fetch_all_feeds()
 
-    message = MIMEMultipart()
-    message["From"] = sender
-    message["To"] = receiver
-    message["Subject"] = f"{subject} ({today_date})"
+    md_content = generate_briefing(items, stats)
+    if not md_content:
+        print("⚠️ 未生成 AI 简报，改为发送原始条目清单")
+        md_content = fallback_markdown(items, stats)
 
-    message.attach(MIMEText(inlined_html, "html", "utf-8"))
+    digest.save_backup(md_content, date_str,
+                       os.path.join(BACKUP_DIR, f"{FLOW_NAME}_{date_str}.md"))
 
-    try:
-        if EMAIL_PORT == 465:
-            server = smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, timeout=20)
-        else:
-            server = smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=20)
-            server.starttls()
-
-        server.login(sender, EMAIL_PASSWORD.strip())
-        server.sendmail(sender, [receiver], message.as_string())
-        server.quit()
-        print("🎉 简报正文已成功发送至邮箱！")
-    except Exception as e:
-        print(f"❌ 邮件发送失败: {str(e)}")
-        sys.exit(1)
+    html, plain_text = digest.render_email(
+        brand_title=BRAND_TITLE, subtitle=SUBTITLE, footer=FOOTER,
+        markdown_text=md_content, stats=stats, date_str=date_str,
+    )
+    ok = digest.send_email(
+        f"{SUBJECT} ({date_str})", html, plain_text,
+        attachments=[(f"{FLOW_NAME}-{date_str}-items.md", digest.items_to_markdown(items))],
+    )
+    sys.exit(0 if ok else 1)
 
 
-# ---------------------------------------------------------------------------
-# 主流程入口
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    md_content = generate_briefing()
-    send_email("【AIFrontier】每周 AI 模型、Agent 与多模态简报", md_content)
+    main()
