@@ -1,7 +1,8 @@
 name: Job Monitor - 招聘信息实时抓取
 
-# BOSS 直聘需要「国内 IP + 登录态」：把 runner 输入填成 self-hosted（国内 Mac mini），
-# 并确保该机器已运行 scripts/setup_macmini_runner.sh + scripts/boss_login.py。
+# 手机一键抓取：GitHub App → Actions → 本 workflow → Run workflow（默认值已填好，直接点 Run）。
+# 默认跑在 self-hosted runner（这台 Mac）上：只有国内 IP 才能抓到 BOSS 直聘。
+# 换机器/首次部署：bash scripts/setup_macmini_runner.sh（含依赖安装 + BOSS 扫码登录）。
 on:
   schedule:
     # 每天 UTC 0:00 (北京时间 8:00) 自动运行
@@ -9,14 +10,14 @@ on:
   # 支持在 GitHub Actions 页面手动点击触发，可输入目标城市与岗位
   workflow_dispatch:
     inputs:
-      target_city:
-        description: '目标城市（如：北京、上海、深圳、杭州、广州；填「全国」则不筛选）'
-        required: false
-        default: '全国'
       target_job:
         description: '目标岗位关键词（如：芯片设计、算法工程师、建模；会自动扩展同义词）'
         required: false
         default: '芯片设计'
+      target_city:
+        description: '目标城市（如：北京、上海、深圳、杭州、广州；填「全国」则不筛选）'
+        required: false
+        default: '全国'
       max_pages:
         description: '猎聘抓取页数（1-10，默认3，每页约40条）'
         required: false
@@ -33,10 +34,14 @@ on:
         description: 'BOSS 直聘抓取详情正文的岗位数（默认0关闭，建议不超过5）'
         required: false
         default: '0'
-      runner:
-        description: '执行环境标签（默认 ubuntu-latest；填国内 self-hosted runner 标签可抓 BOSS，如 self-hosted）'
+      boss_headful:
+        description: 'BOSS 是否显示浏览器窗口（1 有头更稳，0 无头适合锁屏/无人值守）'
         required: false
-        default: 'ubuntu-latest'
+        default: '1'
+      runner:
+        description: '执行环境：默认 self-hosted（这台 Mac，可抓 BOSS）；填 ubuntu-latest 则云端跑但抓不到 BOSS'
+        required: false
+        default: 'self-hosted'
       target_industry:
         description: '目标行业（默认不限）'
         required: false
@@ -58,32 +63,74 @@ on:
           - '企业服务'
           - '广告/营销/传媒'
 
+# 避免定时任务和手动触发重叠（同一账号并发请求更容易触发 BOSS 风控）
+concurrency:
+  group: job-monitor
+  cancel-in-progress: false
+
 jobs:
   analyze-jobs:
-    runs-on: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
+    runs-on: ${{ github.event.inputs.runner || 'self-hosted' }}
     timeout-minutes: 45
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      # 云端 runner 才需要现装 Python；self-hosted 直接用机器上已装好的 python3
+      - name: Set up Python (cloud runner only)
+        if: runner.environment == 'github-hosted'
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies
+      - name: Prepare Python Environment
         run: |
-          python -m pip install --upgrade pip
-          pip install requests markdown premailer openai playwright lxml
-          if [ "$(uname)" = "Linux" ]; then
-            python -m playwright install --with-deps chromium
+          set -euo pipefail
+          if [ "${{ runner.environment }}" = "self-hosted" ]; then
+            PY="$(command -v python3 || true)"
           else
-            python -m playwright install chromium
+            PY="$(command -v python3 || command -v python)"
+          fi
+          if [ -z "${PY:-}" ]; then
+            echo "::error::没找到 python3，请先在服务器上运行 bash scripts/setup_macmini_runner.sh"
+            exit 1
+          fi
+          echo "PYTHON_BIN=$PY" >> "$GITHUB_ENV"
+          echo "使用解释器：$PY（$("$PY" -V 2>&1)）"
+          if "$PY" -c "import requests, markdown, premailer, openai, lxml, playwright" 2>/dev/null; then
+            echo "DEPS_READY=1" >> "$GITHUB_ENV"
+            echo "✅ Python 依赖已就绪，跳过安装"
+          else
+            echo "DEPS_READY=0" >> "$GITHUB_ENV"
+            echo "ℹ️ 依赖不完整，稍后自动安装"
+          fi
+
+      - name: Check BOSS Login State
+        if: runner.environment == 'self-hosted'
+        run: |
+          PROFILE="$HOME/boss_chrome_profile"
+          if [ -d "$PROFILE" ]; then
+            echo "✅ 找到 BOSS 登录 profile：$PROFILE"
+          else
+            echo "::warning::未找到 $PROFILE，本次会跳过 BOSS 直聘。请在服务器上运行 python3 scripts/boss_login.py 完成扫码登录。"
+          fi
+
+      - name: Install Dependencies
+        if: env.DEPS_READY != '1'
+        run: |
+          "$PYTHON_BIN" -m pip install --upgrade pip || true
+          "$PYTHON_BIN" -m pip install --user requests markdown premailer openai playwright lxml \
+            || "$PYTHON_BIN" -m pip install --break-system-packages requests markdown premailer openai playwright lxml
+          if [ "$(uname)" = "Linux" ]; then
+            "$PYTHON_BIN" -m playwright install --with-deps chromium
+          else
+            "$PYTHON_BIN" -m playwright install chromium
           fi
 
       - name: Run Unit Tests
-        run: python -m unittest discover -s tests -v
+        run: |
+          "$PYTHON_BIN" -m unittest discover -s tests -v
 
       - name: Run Job Analysis Script
         env:
@@ -97,7 +144,7 @@ jobs:
           BOSS_COOKIES: ${{ secrets.BOSS_COOKIES }}
           BOSS_PROXY: ${{ secrets.BOSS_PROXY }}
           BOSS_PROFILE_DIR: ${{ secrets.BOSS_PROFILE_DIR || '' }}
-          BOSS_HEADFUL: ${{ secrets.BOSS_HEADFUL || '1' }}
+          BOSS_HEADFUL: ${{ github.event.inputs.boss_headful || secrets.BOSS_HEADFUL || '1' }}
           BOSS_PAGES: ${{ github.event.inputs.boss_pages || '1' }}
           BOSS_KEYWORDS_COUNT: ${{ github.event.inputs.boss_keywords || '1' }}
           BOSS_MAX_DETAIL: ${{ github.event.inputs.boss_detail || '0' }}
@@ -107,7 +154,7 @@ jobs:
           TARGET_INDUSTRY: ${{ github.event.inputs.target_industry || '不限' }}
           MAX_PAGES: ${{ github.event.inputs.max_pages || '3' }}
         run: |
-          python scripts/perfpulse_job_analysis.py
+          "$PYTHON_BIN" scripts/perfpulse_job_analysis.py
 
       - name: Upload Job Results
         if: always()

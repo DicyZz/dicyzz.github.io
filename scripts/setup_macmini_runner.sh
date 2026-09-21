@@ -54,6 +54,10 @@ cat > "$PLIST" <<EOF
     <string>com.github.actions.runner</string>
     <key>ProgramArguments</key>
     <array>
+        <!-- caffeinate -s：只要有任务在跑就不让机器休眠（服务器场景必需，
+             否则 Mac 睡着时收不到 workflow 派发的任务） -->
+        <string>/usr/bin/caffeinate</string>
+        <string>-s</string>
         <string>/bin/bash</string>
         <string>$RUNNER_DIR/run.sh</string>
     </array>
@@ -70,8 +74,8 @@ cat > "$PLIST" <<EOF
 </dict>
 </plist>
 EOF
-launchctl unload "$PLIST" 2>/dev/null || true
-launchctl load "$PLIST"
+launchctl unload "$PLIST" 2>/dev/null || launchctl bootout "gui/$UID/com.github.actions.runner" 2>/dev/null || true
+launchctl load "$PLIST" 2>/dev/null || launchctl bootstrap "gui/$UID" "$PLIST"
 
 echo "== 6/6 登录 BOSS（保存登录态） =="
 echo "即将打开浏览器，请用 BOSS App 扫码登录，登录完成后回终端按回车。"
@@ -80,5 +84,7 @@ python3 "$REPO_DIR/scripts/boss_login.py"
 
 echo ""
 echo "✅ 全部完成！"
-echo "   runner 已开机自启，BOSS 登录态已保存。"
-echo "   在 iPhone 上触发时，runner 填 self-hosted 即可。"
+echo "   runner 已开机自启（并用 caffeinate 防止休眠），BOSS 登录态已保存。"
+echo "   手机端：GitHub App → Actions → Job Monitor → Run workflow → 直接点 Run。"
+echo "   （workflow 默认 runner=self-hosted，就是这台机器）"
+echo "   登录态过期时重跑：python3 scripts/boss_login.py"

@@ -15,6 +15,52 @@
 | `scripts/setup_macmini_runner.sh` | 在国内 Mac mini 上一键部署 self-hosted runner |
 | `tests/test_boss_scraper.py` | 离线回归测试（不需要浏览器/登录态） |
 
+## 手机一键抓取（日常用法）
+
+1. 手机打开 **GitHub App**（或浏览器）→ 进入仓库 `DicyZz/dicyzz.github.io`。
+2. **Actions** → 左侧选 **Job Monitor - 招聘信息实时抓取**。
+3. 点右上 **Run workflow**。输入框默认值已经填好，直接点绿色 **Run workflow** 即可：
+
+| 输入 | 默认 | 含义 |
+| --- | --- | --- |
+| `target_job` | 芯片设计 | 岗位关键词，会自动扩展同义词 |
+| `target_city` | 全国 | 目标城市 |
+| `runner` | **self-hosted** | 默认跑在家里这台 Mac（有国内 IP，能抓 BOSS） |
+| `boss_pages` / `boss_keywords` | 1 / 1 | BOSS 翻页数与关键词个数，调大覆盖更广但更容易触发风控 |
+| `boss_detail` | 0 | 抓取 N 条岗位的详情正文（建议 ≤5） |
+| `boss_headful` | 1 | BOSS 是否显示浏览器窗口；无人值守/锁屏出问题时改 0 |
+| `max_pages` | 3 | 猎聘翻页数 |
+
+4. 跑完会做两件事：**发邮件**（抓取清单 + 可选的 DeepSeek 分析），并把 `jobs_result.json/md` 上传成 Actions artifact。
+
+> 想临时改成云端跑（抓不到 BOSS，只抓其他源）：把 `runner` 填 `ubuntu-latest`。
+
+## 服务器（这台 Mac）运维
+
+runner 通过 LaunchAgent 开机自启，并用 `caffeinate -s` 防止机器休眠——
+Mac 一旦睡着就收不到 GitHub 派发的任务，任务会一直卡在 Queued。
+
+```bash
+# 看 runner 是否在跑（有输出即正常，第一列是 PID）
+launchctl list | grep actions.runner
+
+# 实时日志 / 重启 runner
+tail -f ~/actions-runner/runner.log
+launchctl kickstart -k "gui/$UID/com.github.actions.runner"
+
+# BOSS 登录态过期时重新扫码
+python3 scripts/boss_login.py
+```
+
+首次部署或换机器：
+
+```bash
+bash scripts/setup_macmini_runner.sh   # 注册 runner + 装依赖 + 扫码登录 + 开机自启
+```
+
+> 注意：runner 只在「用户已登录桌面」时运行。如果 Mac 重启后停在登录界面没人登录，
+> 任务会一直排队；建议在「系统设置 → 用户与群组」里开启自动登录，或在重启后手动登录一次。
+
 ## 为什么必须国内 IP
 
 BOSS 直聘对海外 IP 会重定向到登录 / 安全校验页，GitHub 云端 runner（`ubuntu-latest`）
@@ -84,6 +130,8 @@ python -m unittest discover -s tests -v
 
 | 现象 | 原因与处理 |
 | --- | --- |
+| 手机上点了 Run，但一直卡在 Queued | 这台 Mac 没开机 / 未登录桌面 / runner 挂了：`launchctl list \| grep actions.runner` 检查，必要时 `launchctl kickstart -k "gui/$UID/com.github.actions.runner"` |
+| 报错 `没找到 python3` 或 `actions/setup-python` 失败 | 说明跑在 self-hosted 但机器没装好依赖：重跑 `bash scripts/setup_macmini_runner.sh`；workflow 在 self-hosted 上只检测已有依赖，不会再去联网装 Python |
 | 日志出现「未登录或被风控，已跳转」 | 登录态过期：在国内 Mac 上重跑 `boss_login.py`；同时看 `boss_debug/` 里的截图与 HTML |
 | 日志出现「接口不可用…回退 DOM 解析」 | 站点接口调整或临时风控；DOM 兜底仍能抓到数据，若长期如此可对比 `boss_debug/` 里的 HTML 更新选择器 |
 | 抓到 0 条但没报风控 | 关键词/城市组合太窄，换更通用的关键词；或把 `BOSS_PAGES` 调到 2 |
