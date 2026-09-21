@@ -30,9 +30,8 @@ EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")
 
 # ---------------------------------------------------------------------------
-# 1. 各模块 Top 顶级数据源全量配置（按简报四板块组织）
+# 1. 各模块 Top 顶级数据源全量配置（已扩充优质源）
 # ---------------------------------------------------------------------------
-# 各板块每源抓取上限（差异化，平衡四板块）
 CATEGORY_MAX_ITEMS = {
     "News": 4,
     "Blog_Posts": 6,
@@ -41,43 +40,60 @@ CATEGORY_MAX_ITEMS = {
 }
 
 MODULE_FEEDS = {
-    # === 新闻与发布 ===
+    # === 新闻与发布 (实验室与大厂官方) ===
     "News": {
         "OpenAI News": "https://openai.com/news/rss.xml",
+        "Anthropic News": "https://www.anthropic.com/feed.xml",
         "Google DeepMind Blog": "https://deepmind.google/blog/rss.xml",
         "Google AI Blog": "https://research.google/blog/rss/",
+        "Meta AI Research": "https://ai.meta.com/blog/rss/",
+        "Microsoft Research Blog": "https://www.microsoft.com/en-us/research/feed/",
         "Hugging Face Blog": "https://huggingface.co/blog/feed.xml",
         "Google Developers Blog (Gemini)": "https://developers.googleblog.com/feeds/posts/default",
         "NVIDIA Developer AI Blog": "https://developer.nvidia.com/blog/category/ai-deep-learning/feed/",
+        "Apple Machine Learning Research": "https://machinelearning.apple.com/rss.xml",
+        "AWS Machine Learning Blog": "https://aws.amazon.com/blogs/machine-learning/feed/",
     },
 
-    # === 深度文章 / 技术博客 ===
+    # === 深度文章 / 技术博客 (权威学者与顶级学术机构) ===
     "Blog_Posts": {
         "Lil'Log (Lilian Weng)": "https://lilianweng.github.io/index.xml",
+        "BAIR (Berkeley AI Research)": "https://bair.berkeley.edu/blog/feed.xml",
+        "LMSYS Org Blog (Chatbot Arena)": "https://lmsys.org/blog/feed.xml",
         "The Gradient": "https://thegradient.pub/rss/",
         "Import AI (Jack Clark)": "https://jack-clark.net/feed/",
-        "Hacker News AI": "https://hnrss.org/newest?q=LLM+OR+agent+OR+multimodal",
+        "Jay Alammar Blog": "https://jalammar.github.io/feed.xml",
+        "Ahead of AI (Sebastian Raschka)": "https://magazine.sebastianraschka.com/feed",
+        "Chip Huyen Blog": "https://huyenchip.com/feed.xml",
         "Simon Willison": "https://simonwillison.net/atom/everything/",
         "Eugene Yan": "https://eugeneyan.com/rss/",
+        "Hacker News AI": "https://hnrss.org/newest?q=LLM+OR+agent+OR+multimodal",
     },
 
-    # === 论文 ===
+    # === 论文 (ArXiv 分类与学术聚合) ===
     "Research_Papers": {
         "ArXiv Machine Learning (cs.LG)": "http://export.arxiv.org/api/query?search_query=cat:cs.LG&sortBy=submittedDate&sortOrder=descending&max_results=20",
         "ArXiv Computation and Language (cs.CL)": "http://export.arxiv.org/api/query?search_query=cat:cs.CL&sortBy=submittedDate&sortOrder=descending&max_results=20",
         "ArXiv Artificial Intelligence (cs.AI)": "http://export.arxiv.org/api/query?search_query=cat:cs.AI&sortBy=submittedDate&sortOrder=descending&max_results=20",
         "ArXiv Computer Vision (cs.CV)": "http://export.arxiv.org/api/query?search_query=cat:cs.CV&sortBy=submittedDate&sortOrder=descending&max_results=20",
+        "ArXiv Sound/Audio (cs.SD)": "http://export.arxiv.org/api/query?search_query=cat:cs.SD&sortBy=submittedDate&sortOrder=descending&max_results=20",
+        "ArXiv Robotics (cs.RO)": "http://export.arxiv.org/api/query?search_query=cat:cs.RO&sortBy=submittedDate&sortOrder=descending&max_results=20",
+        "Papers With Code Latest Trends": "https://paperswithcode.com/rss/latest",
     },
 
-    # === 其他资料（开源发布、聚合） ===
+    # === 其他资料（核心开源生态发布） ===
     "Other_Materials": {
         "Hugging Face Transformers Releases": "https://github.com/huggingface/transformers/releases.atom",
         "PyTorch GitHub Releases": "https://github.com/pytorch/pytorch/releases.atom",
-        "llama.cpp GitHub Releases": "https://github.com/ggml-org/llama.cpp/releases.atom",
         "vLLM GitHub Releases": "https://github.com/vllm-project/vllm/releases.atom",
         "SGLang GitHub Releases": "https://github.com/sgl-project/sglang/releases.atom",
+        "llama.cpp GitHub Releases": "https://github.com/ggml-org/llama.cpp/releases.atom",
         "Ollama GitHub Releases": "https://github.com/ollama/ollama/releases.atom",
         "LangChain GitHub Releases": "https://github.com/langchain-ai/langchain/releases.atom",
+        "DSPy GitHub Releases": "https://github.com/stanfordnlp/dspy/releases.atom",
+        "Unsloth GitHub Releases": "https://github.com/unslothai/unsloth/releases.atom",
+        "Microsoft DeepSpeed Releases": "https://github.com/microsoft/DeepSpeed/releases.atom",
+        "AutoGen GitHub Releases": "https://github.com/microsoft/autogen/releases.atom",
     }
 }
 
