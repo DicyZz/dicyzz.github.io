@@ -132,6 +132,7 @@ python -m unittest discover -s tests -v
 | --- | --- |
 | 手机上点了 Run，但一直卡在 Queued | 这台 Mac 没开机 / 未登录桌面 / runner 挂了：`launchctl list \| grep actions.runner` 检查，必要时 `launchctl kickstart -k "gui/$UID/com.github.actions.runner"` |
 | 报错 `没找到 python3` 或 `actions/setup-python` 失败 | 说明跑在 self-hosted 但机器没装好依赖：重跑 `bash scripts/setup_macmini_runner.sh`；workflow 在 self-hosted 上只检测已有依赖，不会再去联网装 Python |
+| 某个步骤**瞬间失败**（几十毫秒）且日志里没有任何输出 | run 脚本里同时出现了 `${{ }}` 和普通花括号（例如 `${VAR:-}`）：GitHub 会把这类脚本转成 `format()` 求值，非法占位符导致脚本根本没生成。`tests/test_workflows.py` 已加守卫，本地 `python -m unittest discover -s tests` 就能提前拦住 |
 | 日志出现「未登录或被风控，已跳转」 | 登录态过期：在国内 Mac 上重跑 `boss_login.py`；同时看 `boss_debug/` 里的截图与 HTML |
 | 日志出现「接口不可用…回退 DOM 解析」 | 站点接口调整或临时风控；DOM 兜底仍能抓到数据，若长期如此可对比 `boss_debug/` 里的 HTML 更新选择器 |
 | 抓到 0 条但没报风控 | 关键词/城市组合太窄，换更通用的关键词；或把 `BOSS_PAGES` 调到 2 |

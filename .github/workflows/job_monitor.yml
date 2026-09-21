@@ -87,18 +87,20 @@ jobs:
       - name: Prepare Python Environment
         run: |
           set -euo pipefail
-          if [ "${{ runner.environment }}" = "self-hosted" ]; then
-            PY="$(command -v python3 || true)"
-          else
-            PY="$(command -v python3 || command -v python)"
-          fi
-          if [ -z "${PY:-}" ]; then
+          PY=""
+          for candidate in python3 python; do
+            if command -v "$candidate" >/dev/null 2>&1; then
+              PY="$(command -v "$candidate")"
+              break
+            fi
+          done
+          if [ -z "$PY" ]; then
             echo "::error::没找到 python3，请先在服务器上运行 bash scripts/setup_macmini_runner.sh"
             exit 1
           fi
           echo "PYTHON_BIN=$PY" >> "$GITHUB_ENV"
           echo "使用解释器：$PY（$("$PY" -V 2>&1)）"
-          if "$PY" -c "import requests, markdown, premailer, openai, lxml, playwright" 2>/dev/null; then
+          if "$PY" -c "import requests, markdown, premailer, openai, lxml, playwright, yaml" 2>/dev/null; then
             echo "DEPS_READY=1" >> "$GITHUB_ENV"
             echo "✅ Python 依赖已就绪，跳过安装"
           else
@@ -120,8 +122,8 @@ jobs:
         if: env.DEPS_READY != '1'
         run: |
           "$PYTHON_BIN" -m pip install --upgrade pip || true
-          "$PYTHON_BIN" -m pip install --user requests markdown premailer openai playwright lxml \
-            || "$PYTHON_BIN" -m pip install --break-system-packages requests markdown premailer openai playwright lxml
+          "$PYTHON_BIN" -m pip install --user requests markdown premailer openai playwright lxml pyyaml \
+            || "$PYTHON_BIN" -m pip install --break-system-packages requests markdown premailer openai playwright lxml pyyaml
           if [ "$(uname)" = "Linux" ]; then
             "$PYTHON_BIN" -m playwright install --with-deps chromium
           else

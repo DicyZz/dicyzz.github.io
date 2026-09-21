@@ -411,11 +411,15 @@ class FakePlaywrightModuleTestCase(unittest.TestCase):
             name: sys.modules.get(name) for name in ("playwright", "playwright.sync_api")
         }
         self._saved_sleep = boss._sleep_between_requests
+        self._saved_warn = boss.warn
         boss._sleep_between_requests = lambda *a, **k: None
+        self.warnings = []
+        boss.warn = self.warnings.append
         os.environ.pop("BOSS_COOKIES", None)
 
     def tearDown(self):
         boss._sleep_between_requests = self._saved_sleep
+        boss.warn = self._saved_warn
         for name, module in self._saved_modules.items():
             if module is None:
                 sys.modules.pop(name, None)
@@ -492,6 +496,10 @@ class FakePlaywrightModuleTestCase(unittest.TestCase):
         self.assertEqual(jobs, [])
         self.assertEqual(chromium.context.request.calls, [])  # 命中拦截后不再请求接口
         self.assertTrue(os.listdir(debug_dir))  # 留下了诊断产物
+        # 同时要给出可操作的告警（在 Actions 上会变成 annotation）
+        self.assertTrue(
+            any(("登录态" in w or "风控" in w) for w in self.warnings), self.warnings
+        )
 
     def test_api_falls_back_to_dom_when_not_json(self):
         chromium = FakeChromium(self.HTML_WITH_JOBS, {1: "<html>waf</html>"})
