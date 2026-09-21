@@ -1,9 +1,13 @@
 name: AIFrontier Weekly Push
 
+# 定时触发改由本机 Mac mini 负责（周一至周四 08:00 北京时间）：
+#   scripts/setup_local_scheduler.sh   # 安装 launchd 定时
+#   scripts/local_briefings.sh         # 实际执行入口
+# GitHub 自带的 schedule 实测稳定迟到 4.5–5.5 小时（计划 00:00 UTC，实际 04:30+ 才跑），
+# 做不到“早上 8 点”，因此停用；想恢复云端兜底就取消注释，但会与本机定时重复发信。
 on:
-  schedule:
-    # 每周一 UTC 02:00 (北京时间 10:00) 自动触发，错开 PerfPulse
-    - cron: '0 2 * * 1'
+  # schedule:
+  #   - cron: '0 0 * * 1-4'   # 周一至周四 UTC 00:00 = 北京时间 08:00
   workflow_dispatch: # 支持手动触发
 
 jobs:
