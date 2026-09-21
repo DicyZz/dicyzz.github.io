@@ -500,6 +500,14 @@ def _sleep_between_requests(low: float = 1.2, high: float = 2.6) -> None:
     time.sleep(random.uniform(low, high))
 
 
+def warn(message: str) -> None:
+    """在 GitHub Actions 上输出 annotation（手机/网页上直接可见），否则打印普通告警。"""
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        print(f"::warning::[BOSS] {message}")
+    else:
+        print(f"⚠️ [BOSS] {message}")
+
+
 def _dump_debug(debug_dir: str, name: str, page=None, text: str = "") -> str:
     """把出问题的页面存下来，方便回看。返回落盘路径。"""
     if not debug_dir:
@@ -738,13 +746,14 @@ def fetch_jobs(
                       wait_until="domcontentloaded")
             page.wait_for_timeout(random.randint(2000, 3500))
             if is_blocked_url(page.url):
-                log(f"⚠️ [BOSS] 未登录或被风控，已跳转：{page.url}")
-                log("   请在 Mac mini 上运行 scripts/boss_login.py 完成一次扫码登录")
+                warn(f"未登录或被风控，已跳转：{page.url}")
+                warn("登录态可能已过期：请在服务器上运行 python3 scripts/boss_login.py 重新扫码")
                 _dump_debug(debug_dir, "blocked", page, page.content())
                 return []
             blocker = detect_block(page.content())
             if blocker:
-                log(f"⚠️ [BOSS] 页面命中风控特征「{blocker}」：{page.url}")
+                warn(f"页面命中风控特征「{blocker}」：{page.url}")
+                warn("若持续出现，请先停止抓取几分钟再重试，或换网络出口")
                 _dump_debug(debug_dir, "blocked", page, page.content())
                 return []
 
@@ -768,7 +777,7 @@ def fetch_jobs(
                                     page_jobs, has_more = dom_jobs, True
                                     source_used = "DOM"
                         except BossBlocked as e:
-                            log(f"⚠️ [BOSS] {e}")
+                            warn(str(e))
                             if mode == "api":
                                 return jobs
                             api_failures += 1
@@ -814,7 +823,7 @@ def fetch_jobs(
                     pass
 
     if api_failures and not jobs:
-        log("   ↳ 提示：接口连续失败，可能登录态已过期或站点接口调整，请重跑 boss_login.py")
+        warn("接口连续失败：可能登录态已过期或站点接口调整，请重跑 python3 scripts/boss_login.py")
     return jobs
 
 
