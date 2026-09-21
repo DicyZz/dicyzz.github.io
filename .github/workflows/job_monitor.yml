@@ -167,7 +167,9 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
           BOSS_COOKIES: ${{ secrets.BOSS_COOKIES }}
-          BOSS_PROXY: ${{ secrets.BOSS_PROXY }}
+          # 这台工作机本身就在国内，BOSS 必须直连：走境外代理会被判定异常并掐断连接
+          # （BOSS_PROXY 是早期给云端 runner 准备的香港代理，这里显式置空；确需代理再改）
+          BOSS_PROXY: ''
           BOSS_PROFILE_DIR: ${{ secrets.BOSS_PROFILE_DIR || '' }}
           # BOSS 专属参数（平台选择、翻页数、关键词个数见上面 Resolve Sources 与 PAGES/KEYWORD_LIMIT）
           BOSS_HEADFUL: '1'

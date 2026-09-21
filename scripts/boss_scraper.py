@@ -508,6 +508,19 @@ def warn(message: str) -> None:
         print(f"⚠️ [BOSS] {message}")
 
 
+def proxy_hint(proxy_options: dict, log=print) -> None:
+    """配置了代理却抓不到时，提示这是最常见的原因。
+
+    国内机器直连 BOSS 才是正确姿势；走境外代理会被判定为异常访问，
+    典型表现是 Page.goto 报 ERR_RESPONSE_HEADERS_TRUNCATED / 连接被重置。
+    """
+    if proxy_options:
+        log(
+            f"   ↳ 提示：当前通过 {proxy_options.get('server')} 访问 BOSS。"
+            "若本机已在国内，请去掉 BOSS_PROXY（境外出口会被风控掐断连接）"
+        )
+
+
 def _dump_debug(debug_dir: str, name: str, page=None, text: str = "") -> str:
     """把出问题的页面存下来，方便回看。返回落盘路径。"""
     if not debug_dir:
@@ -748,12 +761,14 @@ def fetch_jobs(
             if is_blocked_url(page.url):
                 warn(f"未登录或被风控，已跳转：{page.url}")
                 warn("登录态可能已过期：请在服务器上运行 python3 scripts/boss_login.py 重新扫码")
+                proxy_hint(proxy_options, log)
                 _dump_debug(debug_dir, "blocked", page, page.content())
                 return []
             blocker = detect_block(page.content())
             if blocker:
                 warn(f"页面命中风控特征「{blocker}」：{page.url}")
                 warn("若持续出现，请先停止抓取几分钟再重试，或换网络出口")
+                proxy_hint(proxy_options, log)
                 _dump_debug(debug_dir, "blocked", page, page.content())
                 return []
 
@@ -813,6 +828,7 @@ def fetch_jobs(
         log(f"ℹ️ [BOSS] {e}")
     except Exception as e:
         log(f"⚠️ [BOSS] 抓取失败: {e}")
+        proxy_hint(proxy_options, log)
         _dump_debug(debug_dir, "error", page, "")
     finally:
         for closer in (context, browser):
