@@ -39,7 +39,7 @@ if ! command -v python3 >/dev/null; then
   echo "请先安装 Python3（https://www.python.org/downloads/ 或 brew install python）"; exit 1
 fi
 python3 -m pip install --user --upgrade pip 2>/dev/null || true
-python3 -m pip install --user requests markdown premailer openai playwright
+python3 -m pip install --user requests markdown premailer openai playwright lxml
 python3 -m playwright install chromium
 
 echo "== 5/6 生成开机自启 (LaunchAgent) =="

@@ -1,5 +1,7 @@
 name: Job Monitor - 招聘信息实时抓取
 
+# BOSS 直聘需要「国内 IP + 登录态」：把 runner 输入填成 self-hosted（国内 Mac mini），
+# 并确保该机器已运行 scripts/setup_macmini_runner.sh + scripts/boss_login.py。
 on:
   schedule:
     # 每天 UTC 0:00 (北京时间 8:00) 自动运行
@@ -19,6 +21,18 @@ on:
         description: '猎聘抓取页数（1-10，默认3，每页约40条）'
         required: false
         default: '3'
+      boss_pages:
+        description: 'BOSS 直聘翻页数（1-10，默认1；页数越多越容易触发风控）'
+        required: false
+        default: '1'
+      boss_keywords:
+        description: 'BOSS 直聘搜索的关键词个数（默认1，填2-3可扩大覆盖但请求更多）'
+        required: false
+        default: '1'
+      boss_detail:
+        description: 'BOSS 直聘抓取详情正文的岗位数（默认0关闭，建议不超过5）'
+        required: false
+        default: '0'
       runner:
         description: '执行环境标签（默认 ubuntu-latest；填国内 self-hosted runner 标签可抓 BOSS，如 self-hosted）'
         required: false
@@ -47,6 +61,7 @@ on:
 jobs:
   analyze-jobs:
     runs-on: ${{ github.event.inputs.runner || 'ubuntu-latest' }}
+    timeout-minutes: 45
 
     steps:
       - name: Checkout Repository
@@ -60,12 +75,15 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests markdown premailer openai playwright
+          pip install requests markdown premailer openai playwright lxml
           if [ "$(uname)" = "Linux" ]; then
             python -m playwright install --with-deps chromium
           else
             python -m playwright install chromium
           fi
+
+      - name: Run Unit Tests
+        run: python -m unittest discover -s tests -v
 
       - name: Run Job Analysis Script
         env:
@@ -80,6 +98,10 @@ jobs:
           BOSS_PROXY: ${{ secrets.BOSS_PROXY }}
           BOSS_PROFILE_DIR: ${{ secrets.BOSS_PROFILE_DIR || '' }}
           BOSS_HEADFUL: ${{ secrets.BOSS_HEADFUL || '1' }}
+          BOSS_PAGES: ${{ github.event.inputs.boss_pages || '1' }}
+          BOSS_KEYWORDS_COUNT: ${{ github.event.inputs.boss_keywords || '1' }}
+          BOSS_MAX_DETAIL: ${{ github.event.inputs.boss_detail || '0' }}
+          BOSS_DEBUG_DIR: boss_debug
           TARGET_CITY: ${{ github.event.inputs.target_city || '全国' }}
           TARGET_JOB: ${{ github.event.inputs.target_job || '芯片设计' }}
           TARGET_INDUSTRY: ${{ github.event.inputs.target_industry || '不限' }}
@@ -95,4 +117,5 @@ jobs:
           path: |
             jobs_result.json
             jobs_result.md
+            boss_debug/
           if-no-files-found: ignore

@@ -6,8 +6,11 @@
   国内：牛客网、猎聘、智联招聘、前程无忧(51job)、BOSS 直聘(可选)
   国外：RemoteOK、We Work Remotely、Remotive
 说明：拉勾因滑块验证码无法自动化，已排除。
-  BOSS 直聘需配置 BOSS_COOKIES，且必须在「国内 IP」的 self-hosted runner 上运行，
-  否则会被风控重定向到安全校验页（GitHub 云端 runner 为海外 IP，抓不到）。
+  BOSS 直聘需配置 BOSS_COOKIES（或持久化登录 profile），且必须在「国内 IP」的
+  self-hosted runner 上运行，否则会被风控重定向到安全校验页（GitHub 云端 runner
+  为海外 IP，抓不到）。BOSS 抓取细节见 scripts/boss_scraper.py，可用环境变量
+  BOSS_PAGES（翻页数）、BOSS_KEYWORDS_COUNT（搜索的关键词个数）、
+  BOSS_MAX_DETAIL（抓取详情正文的岗位数）、BOSS_DEBUG_DIR（诊断产物目录）调整。
 
 用法：
     TARGET_CITY=北京 TARGET_JOB=芯片设计 TARGET_INDUSTRY=半导体 python scripts/perfpulse_job_analysis.py
@@ -18,13 +21,14 @@ import os
 import json
 import re
 import smtplib
+import sys
 import time
 from datetime import datetime
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from urllib.parse import quote, urlparse
+from urllib.parse import quote
 from xml.etree import ElementTree as ET
 
 import requests
@@ -47,10 +51,9 @@ EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD") or ""
 EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER") or EMAIL_SENDER
 
 MAX_JOBS = int(os.getenv("MAX_JOBS") or 30)
+# BOSS 直聘的登录态/Cookie 文件；其余 BOSS 配置（BOSS_PROXY、BOSS_PAGES、
+# BOSS_MAX_DETAIL、BOSS_MODE 等）由 scripts/boss_scraper.py 统一读取。
 BOSS_COOKIE_FILE = "data/boss_cookies.json"
-# BOSS 直聘专用代理（可选）：http://user:pass@host:port 或 socks5://user:pass@host:port
-# 用于 GitHub 云端 runner（海外 IP）通过国内代理出口抓 BOSS。
-BOSS_PROXY = os.getenv("BOSS_PROXY") or ""
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -360,221 +363,32 @@ def dedupe_jobs(jobs: list) -> list:
 
 
 # ==================== 3.5 BOSS 直聘（Playwright，需国内 IP + Cookie） ====================
-# BOSS 城市编码（与中国天气网同款编码）；未匹配到的城市回退到「全国」
-BOSS_CITY_CODE_MAP = {
-    "北京": "101010100", "上海": "101020100", "广州": "101280100",
-    "深圳": "101280600", "杭州": "101210100", "成都": "101270100",
-    "武汉": "101200100", "南京": "101190100", "西安": "101110100",
-    "苏州": "101190400", "天津": "101030100", "重庆": "101040100",
-    "长沙": "101250100", "郑州": "101180100", "青岛": "101120200",
-    "济南": "101120100", "大连": "101070200", "沈阳": "101070100",
-    "合肥": "101220100", "厦门": "101230200", "福州": "101230100",
-    "东莞": "101281600", "佛山": "101280800", "珠海": "101280700",
-    "宁波": "101210400", "无锡": "101190200", "昆明": "101290100",
-}
-BOSS_NATIONWIDE_CITY_CODE = "100010000"
+# 抓取实现集中在 scripts/boss_scraper.py：接口优先 + DOM 兜底、支持翻页、
+# 关键解析逻辑有离线单测（tests/test_boss_scraper.py）。
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import boss_scraper  # noqa: E402
 
-
-def _resolve_boss_city_code(city: str) -> str:
-    return BOSS_CITY_CODE_MAP.get((city or "").strip(), BOSS_NATIONWIDE_CITY_CODE)
+BOSS_CITY_CODE_MAP = boss_scraper.BOSS_CITY_CODE_MAP
+BOSS_NATIONWIDE_CITY_CODE = boss_scraper.BOSS_NATIONWIDE_CITY_CODE
+# 使用前 N 个扩展关键词搜索（默认 1，即社区版行为；可在 workflow 输入里调大）
+try:
+    BOSS_KEYWORDS_COUNT = int(str(os.getenv("BOSS_KEYWORDS_COUNT") or "1").strip())
+except ValueError:
+    BOSS_KEYWORDS_COUNT = 1
 
 
 def load_boss_cookies() -> list:
     """从 BOSS_COOKIES 环境变量或 data/boss_cookies.json 读取登录态。"""
-    raw = os.getenv("BOSS_COOKIES")
-    source = "环境变量 BOSS_COOKIES"
-    if not raw and os.path.exists(BOSS_COOKIE_FILE):
-        with open(BOSS_COOKIE_FILE, "r", encoding="utf-8") as f:
-            raw = f.read()
-        source = BOSS_COOKIE_FILE
-    if not raw:
-        return []
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        print(f"⚠️ [BOSS] Cookie 解析失败（{source}）: {e}")
-        return []
-    cookies = []
-    if isinstance(data, list):
-        cookies = data
-    elif isinstance(data, dict):
-        for name, value in data.items():
-            cookies.append({"name": name, "value": str(value), "domain": ".zhipin.com", "path": "/"})
-    else:
-        print(f"⚠️ [BOSS] Cookie 格式不正确（{source}），应为 JSON 数组或对象")
-        return []
-    print(f"🔑 [BOSS] 已从 {source} 读取 {len(cookies)} 条 Cookie")
-    return cookies
+    return boss_scraper.load_cookies(BOSS_COOKIE_FILE)
 
 
-def _boss_proxy_options() -> dict:
-    """把 BOSS_PROXY 转成 Playwright 的 proxy 启动参数。"""
-    if not BOSS_PROXY:
-        return {}
-    raw = BOSS_PROXY.strip()
-    if "://" not in raw:
-        raw = "http://" + raw
-    u = urlparse(raw)
-    if not u.hostname:
-        print(f"⚠️ [BOSS] BOSS_PROXY 格式无效: {BOSS_PROXY}")
-        return {}
-    port = u.port or (1080 if u.scheme in ("socks5", "socks5h") else 80)
-    return {
-        "server": f"{u.scheme}://{u.hostname}:{port}",
-        "username": u.username or "",
-        "password": u.password or "",
-    }
+def fetch_boss_jobs(keyword, city: str) -> list:
+    """抓取 BOSS 直聘：优先 self-hosted 持久化 profile，其次 Cookie 注入。
 
-
-def _boss_search_url(keyword: str, city: str):
-    """构造 BOSS 搜索页 URL。"""
-    city_code = _resolve_boss_city_code(city)
-    label = "全国" if city_code == BOSS_NATIONWIDE_CITY_CODE else city
-    return f"https://www.zhipin.com/web/geek/job?query={quote(keyword)}&city={city_code}", label
-
-
-def _boss_is_blocked_or_login(url: str) -> bool:
-    """BOSS 跳转到登录/风控页时返回 True。"""
-    return any(x in url for x in ("passport", "security_check", "verify", "captcha", "/web/user/"))
-
-
-def _boss_parse_cards(page, city: str) -> list:
-    """从已打开的 BOSS 页面解析岗位卡片。"""
-    # 滚动加载更多岗位
-    for _ in range(3):
-        try:
-            page.mouse.wheel(0, 4000)
-        except Exception:
-            pass
-        page.wait_for_timeout(1500)
-
-    cards = page.query_selector_all(".job-card-wrapper")
-    if not cards:
-        cards = page.query_selector_all(".job-list-box li")
-    if not cards:
-        cards = page.query_selector_all("li.job-card-box")
-
-    jobs = []
-    for card in cards[:MAX_JOBS]:
-        try:
-            def _text(sel):
-                el = card.query_selector(sel)
-                return el.inner_text().strip() if el else ""
-            title = _text(".job-name") or _text(".job-title")
-            company = _text(".company-name") or _text(".boss-name")
-            salary = _text(".salary")
-            area = _text(".job-area") or city
-            link_el = card.query_selector("a[href*='job_detail']") or card.query_selector("a[href*='jobDetail']")
-            url = (link_el.get_attribute("href") if link_el else "") or ""
-            if not title:
-                continue
-            jobs.append({
-                "source": "BOSS直聘", "type": "社招",
-                "title": title, "salary": salary,
-                "city": area or city, "company": company,
-                "industry": "", "scale": "",
-                "info": "", "url": url,
-            })
-        except Exception:
-            continue
-    return jobs
-
-
-def _fetch_boss_with_profile(keyword: str, city: str, profile_dir: str) -> list:
-    """self-hosted（国内 Mac）模式：复用持久化登录 profile 的真实浏览器。"""
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        print("⚠️ [BOSS] 未安装 playwright，跳过")
-        return []
-    headful = os.getenv("BOSS_HEADFUL", "1").strip().lower() not in {"0", "false", "no", "off"}
-    search_url, label = _boss_search_url(keyword, city)
-    print(f"🌐 [BOSS直聘] 抓取 [{keyword}]（{label}，{'有头' if headful else '无头'} profile）...")
-    jobs = []
-    try:
-        with sync_playwright() as p:
-            proxy = _boss_proxy_options()
-            kwargs = dict(
-                user_data_dir=profile_dir,
-                headless=not headful,
-                viewport={"width": 1280, "height": 800},
-                locale="zh-CN",
-                user_agent=USER_AGENT,
-            )
-            if proxy:
-                kwargs["proxy"] = proxy
-                print(f"   ↳ 使用代理: {proxy['server']}")
-            context = p.chromium.launch_persistent_context(**kwargs)
-            page = context.pages[0] if context.pages else context.new_page()
-            page.goto(search_url, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_timeout(6000)
-            if _boss_is_blocked_or_login(page.url):
-                print(f"⚠️ [BOSS] 未登录或被风控：{page.url}")
-                print("   请在 Mac mini 上运行 scripts/boss_login.py 完成一次扫码登录")
-                context.close()
-                return []
-            jobs = _boss_parse_cards(page, city)
-            print(f"   ↳ 检索到 {len(jobs)} 条岗位")
-            context.close()
-    except Exception as e:
-        print(f"⚠️ [BOSS] 抓取失败: {e}")
-    print(f"🔍 [BOSS直聘] 检索到 {len(jobs)} 条")
-    return jobs
-
-
-def _fetch_boss_with_cookies(keyword: str, city: str) -> list:
-    """云端 runner 回退模式：注入 Cookie（BOSS 对海外 IP 大概率拦截，仅作兼容）。"""
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        print("⚠️ [BOSS] 未安装 playwright，跳过")
-        return []
-    cookies = load_boss_cookies()
-    if not cookies:
-        print("ℹ️ [BOSS] 未配置 BOSS_COOKIES / 登录 profile，跳过 BOSS 直聘")
-        return []
-
-    search_url, label = _boss_search_url(keyword, city)
-    print(f"🌐 [BOSS直聘] 抓取 [{keyword}]（{label}，Cookie 注入）...")
-    jobs = []
-    try:
-        with sync_playwright() as p:
-            proxy = _boss_proxy_options()
-            launch_kwargs = {"headless": True}
-            if proxy:
-                launch_kwargs["proxy"] = proxy
-                print(f"   ↳ 使用代理: {proxy['server']}")
-            browser = p.chromium.launch(**launch_kwargs)
-            context = browser.new_context(
-                user_agent=USER_AGENT, viewport={"width": 1280, "height": 800}, locale="zh-CN",
-            )
-            try:
-                context.add_cookies(cookies)
-            except Exception as e:
-                print(f"⚠️ [BOSS] 注入 Cookie 失败: {e}")
-
-            page = context.new_page()
-            page.goto(search_url, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_timeout(5000)
-            if _boss_is_blocked_or_login(page.url):
-                print(f"⚠️ [BOSS] 被重定向到登录/安全校验页：{page.url}")
-                print("   云端 runner 为海外 IP，BOSS 基本无法抓取；请改用国内 self-hosted runner")
-                browser.close()
-                return []
-            jobs = _boss_parse_cards(page, city)
-            browser.close()
-    except Exception as e:
-        print(f"⚠️ [BOSS] 抓取失败: {e}")
-    print(f"🔍 [BOSS直聘] 检索到 {len(jobs)} 条")
-    return jobs
-
-
-def fetch_boss_jobs(keyword: str, city: str) -> list:
-    """抓取 BOSS 直聘：优先 self-hosted 持久化 profile，其次 Cookie 注入。"""
-    profile_dir = os.getenv("BOSS_PROFILE_DIR") or os.path.expanduser("~/boss_chrome_profile")
-    if os.path.isdir(profile_dir):
-        return _fetch_boss_with_profile(keyword, city, profile_dir)
-    return _fetch_boss_with_cookies(keyword, city)
+    keyword 支持单个关键词或关键词列表；翻页与详情抓取由环境变量控制
+    （BOSS_PAGES / BOSS_MAX_DETAIL / BOSS_MODE / BOSS_DEBUG_DIR）。
+    """
+    return boss_scraper.fetch_jobs(keyword, city)
 
 
 # ==================== 4. 牛客网（requests） ====================
@@ -1153,8 +967,9 @@ if __name__ == "__main__":
     all_jobs.extend(fetch_liepin_jobs(keywords, TARGET_CITY))
     all_jobs.extend(fetch_zhilian_jobs(keywords, TARGET_CITY))
     all_jobs.extend(fetch_51job_jobs(keywords, TARGET_CITY))
-    # BOSS 直聘（仅搜原始关键词一次，避免频繁请求触发风控；需国内 IP）
-    all_jobs.extend(fetch_boss_jobs(keywords[0], TARGET_CITY))
+    # BOSS 直聘（默认只搜原始关键词，避免频繁请求触发风控；需国内 IP）
+    # 可用 BOSS_KEYWORDS_COUNT / BOSS_PAGES 调整搜索广度
+    all_jobs.extend(fetch_boss_jobs(keywords[:max(1, BOSS_KEYWORDS_COUNT)], TARGET_CITY))
     for keyword in keywords:
         # requests 数据源逐个关键词抓取
         all_jobs.extend(fetch_nowcoder_jobs(keyword, TARGET_CITY))
