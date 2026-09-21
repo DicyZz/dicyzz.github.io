@@ -153,7 +153,9 @@ jobs:
 
       - name: Run Unit Tests
         run: |
-          "${PYTHON_BIN}" -m unittest discover -s tests -v
+          # 同时写一份到工作目录：失败时可以直接在 runner 机器上看到完整输出
+          set -o pipefail
+          "${PYTHON_BIN}" -m unittest discover -s tests -v 2>&1 | tee unit-tests.log
 
       - name: Run Job Analysis Script
         env:
@@ -177,7 +179,13 @@ jobs:
           TARGET_CITY: ${{ github.event.inputs.target_city || '全国' }}
           TARGET_INDUSTRY: ${{ github.event.inputs.target_industry || '不限' }}
         run: |
-          "${PYTHON_BIN}" scripts/perfpulse_job_analysis.py
+          set -o pipefail
+          echo "== 本次运行配置 =="
+          echo "解释器: ${PYTHON_BIN}"
+          echo "平台: ${SOURCES} | 翻页数: ${PAGES} | 关键词个数: ${KEYWORD_LIMIT}"
+          echo "岗位: ${TARGET_JOB} | 城市: ${TARGET_CITY} | 行业: ${TARGET_INDUSTRY}"
+          echo "=================="
+          "${PYTHON_BIN}" scripts/perfpulse_job_analysis.py 2>&1 | tee analysis.log
 
       - name: Upload Job Results
         if: always()
@@ -187,5 +195,7 @@ jobs:
           path: |
             jobs_result.json
             jobs_result.md
+            unit-tests.log
+            analysis.log
             boss_debug/
           if-no-files-found: ignore

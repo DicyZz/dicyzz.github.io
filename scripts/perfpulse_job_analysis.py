@@ -96,7 +96,7 @@ def _env_positive_int(name: str, default: int) -> int:
 
 
 SOURCES = parse_sources(os.getenv("SOURCES"))
-# 翻页数：各平台通用的每关键词页数（1-10）
+# 翻页数：各平台通用的每关键词页数（1-10）。PAGES 优先，未设置时兼容旧的 MAX_PAGES。
 PAGES = max(1, min(_env_positive_int("PAGES", _env_positive_int("MAX_PAGES", 1)), 10))
 # 关键词个数：0（默认）= 用全部扩展关键词
 KEYWORD_LIMIT = _env_positive_int("KEYWORD_LIMIT", 0)

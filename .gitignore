@@ -38,3 +38,5 @@ jobs_result.json
 jobs_result.md
 data/boss_cookies.json
 boss_debug/
+unit-tests.log
+analysis.log

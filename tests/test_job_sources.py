@@ -2,6 +2,10 @@
 # -*- coding: utf-8 -*-
 """抓取范围开关（平台 / 翻页数 / 关键词个数）的单元测试。
 
+注意：这些用例必须**显式指定环境**再重载模块。workflow 运行时会注入
+PAGES / KEYWORD_LIMIT / SOURCES（来自表单输入），如果用例直接读模块里
+import 时算出来的常量，就会在 runner 上得出和本地不同的结果。
+
 运行：
     python -m unittest discover -s tests -v
 """
@@ -15,11 +19,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 
 import perfpulse_job_analysis as job  # noqa: E402
 
+# 会被 run 环境注入、且影响模块常量的环境变量
+ENV_KEYS = ("SOURCES", "PAGES", "MAX_PAGES", "KEYWORD_LIMIT")
+
 
 def _reload_with_env(**env):
-    """带指定环境变量重新加载模块，返回新的模块对象。"""
-    saved = {key: os.environ.get(key) for key in env}
-    os.environ.update({key: str(value) for key, value in env.items()})
+    """清掉相关环境变量后按给定值重载模块；值传 None 表示保持未设置。"""
+    saved = {key: os.environ.get(key) for key in set(ENV_KEYS) | set(env)}
+    for key in ENV_KEYS:
+        os.environ.pop(key, None)
+    for key, value in env.items():
+        if value is not None:
+            os.environ[key] = str(value)
     try:
         return importlib.reload(job)
     finally:
@@ -67,16 +78,22 @@ class TestSelectKeywords(unittest.TestCase):
         self.assertEqual(job.select_keywords(self.KEYWORDS, 99), self.KEYWORDS)
 
 
-class TestEnvOverrides(unittest.TestCase):
+class TestConfigFromEnv(unittest.TestCase):
     """SOURCES / PAGES / KEYWORD_LIMIT 通过环境变量生效。"""
 
     def tearDown(self):
-        # 还原成干净配置，避免污染其他测试
-        _reload_with_env(SOURCES="all", PAGES="1", KEYWORD_LIMIT="0")
+        # 用恢复后的真实环境重载，避免污染其他用例
+        importlib.reload(job)
+
+    def test_defaults_when_env_is_clean(self):
+        module = _reload_with_env()  # 全部清空
+        self.assertEqual(module.PAGES, 1)
+        self.assertEqual(module.KEYWORD_LIMIT, 0)  # 0 = 用全部扩展关键词
+        self.assertEqual(module.SOURCES, set(module.SOURCE_KEYS))
 
     def test_sources_from_env(self):
-        module = _reload_with_env(SOURCES="boss,liepin")
-        self.assertEqual(module.SOURCES, {"boss", "liepin"})
+        self.assertEqual(_reload_with_env(SOURCES="boss,liepin").SOURCES, {"boss", "liepin"})
+        self.assertEqual(_reload_with_env(SOURCES="boss").SOURCES, {"boss"})
 
     def test_pages_from_env_and_clamped(self):
         self.assertEqual(_reload_with_env(PAGES="3").PAGES, 3)
@@ -84,20 +101,16 @@ class TestEnvOverrides(unittest.TestCase):
         self.assertEqual(_reload_with_env(PAGES="0").PAGES, 1)    # 下限 1
         self.assertEqual(_reload_with_env(PAGES="abc").PAGES, 1)  # 非法值回退
 
-    def test_legacy_max_pages_still_works(self):
+    def test_pages_takes_precedence_over_legacy_max_pages(self):
+        # workflow 同时注入 PAGES 时，以 PAGES 为准
+        self.assertEqual(_reload_with_env(PAGES="3", MAX_PAGES="9").PAGES, 3)
+
+    def test_legacy_max_pages_used_when_pages_absent(self):
         self.assertEqual(_reload_with_env(MAX_PAGES="4").PAGES, 4)
 
-    def test_keyword_limit_defaults_to_all(self):
+    def test_keyword_limit_from_env(self):
         self.assertEqual(_reload_with_env(KEYWORD_LIMIT="0").KEYWORD_LIMIT, 0)
         self.assertEqual(_reload_with_env(KEYWORD_LIMIT="5").KEYWORD_LIMIT, 5)
-
-
-class TestDefaultConfig(unittest.TestCase):
-    def test_defaults_are_sane(self):
-        self.assertGreaterEqual(job.PAGES, 1)
-        self.assertLessEqual(job.PAGES, 10)
-        self.assertEqual(job.KEYWORD_LIMIT, 0)  # 默认用全部扩展关键词
-        self.assertEqual(job.SOURCES, set(job.SOURCE_KEYS))
 
 
 if __name__ == "__main__":

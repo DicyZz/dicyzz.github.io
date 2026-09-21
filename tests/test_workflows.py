@@ -21,6 +21,7 @@ import glob
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -184,6 +185,29 @@ class TestWorkflowScripts(unittest.TestCase):
         self.assertIn("concurrency", doc)
         names = [s.get("name") for s in job["steps"]]
         self.assertIn("Run Job Analysis Script", names)
+
+    def test_other_suites_pass_with_workflow_env(self):
+        """单测不能在 workflow 注入的环境变量下失败。
+
+        workflow 会把 SOURCES / PAGES / KEYWORD_LIMIT 等传给任务，如果某个用例
+        直接读取 import 时算出的模块常量，就会「本地过、runner 挂」——这里用
+        workflow 的实际取值再跑一遍其余测试模块，把这种情况挡在本地。
+        """
+        polluted = {
+            **os.environ,
+            "SOURCES": "all",
+            "PAGES": "2",          # 表单默认值
+            "KEYWORD_LIMIT": "0",  # 表单默认值
+        }
+        for module in ("test_boss_scraper.py", "test_job_sources.py"):
+            result = subprocess.run(
+                [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", module, "-v"],
+                cwd=REPO_ROOT, env=polluted, capture_output=True, text=True, errors="replace",
+            )
+            self.assertEqual(
+                result.returncode, 0,
+                f"{module} 在 workflow 注入的环境下失败：\n{result.stderr[-2000:]}",
+            )
 
 
 if __name__ == "__main__":
