@@ -1,5 +1,7 @@
 #!/bin/bash
-# 在本机安装「周一至周四 08:00 跑四个周报」的 launchd 定时任务。
+# 在本机安装两套 launchd 定时任务：
+#   1) 周一至周四 08:00 跑四个周报（local_briefings.sh）
+#   2) 每周五 08:00 跑「芯片通识课」下一讲（run_chipschool.sh）
 #
 # 用法：bash scripts/setup_local_scheduler.sh
 #
@@ -9,6 +11,7 @@
 #   3. 安装并加载 LaunchAgent（周一至周四 08:00，本机时区）
 #
 # 卸载：launchctl bootout "gui/$UID/com.jianzhang.briefings" && rm ~/Library/LaunchAgents/com.jianzhang.briefings.plist
+#      launchctl bootout "gui/$UID/com.jianzhang.chipschool" && rm ~/Library/LaunchAgents/com.jianzhang.chipschool.plist
 
 set -euo pipefail
 
@@ -16,6 +19,7 @@ REPO_URL="git@github.com:DicyZz/dicyzz.github.io.git"
 WORK_REPO="${BRIEFINGS_REPO:-$HOME/briefings}"
 SECRETS_FILE="${BRIEFINGS_SECRETS:-$HOME/.config/briefing-secrets.env}"
 PLIST="$HOME/Library/LaunchAgents/com.jianzhang.briefings.plist"
+CHIP_PLIST="$HOME/Library/LaunchAgents/com.jianzhang.chipschool.plist"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "== 1/3 准备独立克隆：${WORK_REPO} =="
@@ -89,10 +93,52 @@ mkdir -p "$HOME/Library/Logs/briefings"
 launchctl bootout "gui/$UID/com.jianzhang.briefings" 2>/dev/null || true
 launchctl bootstrap "gui/$UID" "${PLIST}"
 
+echo "== 4/4 安装芯片通识课 LaunchAgent（每周五 08:00）=="
+cat > "${CHIP_PLIST}" <<CHIPEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jianzhang.chipschool</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-s</string>
+        <string>/bin/bash</string>
+        <string>${WORK_REPO}/scripts/run_chipschool.sh</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>BRIEFINGS_REPO</key>
+        <string>${WORK_REPO}</string>
+        <key>BRIEFINGS_SECRETS</key>
+        <string>${SECRETS_FILE}</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>0</integer></dict>
+    </array>
+    <key>StandardOutPath</key>
+    <string>${HOME}/Library/Logs/briefings/chipschool-launchd.log</string>
+    <key>StandardErrPath</key>
+    <string>${HOME}/Library/Logs/briefings/chipschool-launchd.log</string>
+</dict>
+</plist>
+CHIPEOF
+launchctl bootout "gui/$UID/com.jianzhang.chipschool" 2>/dev/null || true
+launchctl bootstrap "gui/$UID" "${CHIP_PLIST}"
+
 echo ""
 echo "✅ 完成"
-echo "   定时：周一至周四 08:00（本机时区），下一步会跑的是最近的那个"
+echo "   周报定时：周一至周四 08:00（本机时区）"
+echo "   通识课定时：每周五 08:00（本机时区）"
 echo "   密钥：把 ${SECRETS_FILE} 填好（现在还是空模板）"
-echo "   手动试跑一次：launchctl kickstart -k gui/$UID/com.jianzhang.briefings"
-echo "   看日志：tail -f $HOME/Library/Logs/briefings/$(date +%Y-%m-%d).log"
+echo "   手动试跑周报：launchctl kickstart -k gui/$UID/com.jianzhang.briefings"
+echo "   手动试跑通识课：launchctl kickstart -k gui/$UID/com.jianzhang.chipschool"
+echo "   看周报日志：tail -f $HOME/Library/Logs/briefings/$(date +%Y-%m-%d).log"
+echo "   看通识课日志：tail -f $HOME/Library/Logs/briefings/chipschool-$(date +%Y-%m-%d).log"
 echo "   临时停用：launchctl bootout gui/$UID/com.jianzhang.briefings"
+echo "              launchctl bootout gui/$UID/com.jianzhang.chipschool"

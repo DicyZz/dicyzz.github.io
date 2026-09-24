@@ -23,6 +23,7 @@ SECRETS_FILE="${BRIEFINGS_SECRETS:-$HOME/.config/briefing-secrets.env}"
 LOG_DIR="${BRIEFINGS_LOG_DIR:-$HOME/Library/Logs/briefings}"
 PYTHON="${BRIEFINGS_PYTHON:-/opt/homebrew/bin/python3}"
 FLOWS=(perfpulse aifrontier finfrontier chinatech)
+# 注意：芯片通识课（chipschool）不在这里，它是每周五单独跑 scripts/run_chipschool.sh
 
 mkdir -p "${LOG_DIR}"
 LOG_FILE="${LOG_DIR}/$(date +%Y-%m-%d).log"

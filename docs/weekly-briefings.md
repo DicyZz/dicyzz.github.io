@@ -1,4 +1,4 @@
-# 四份周报 flow（AIFrontier / ChinaTech / FinFrontier / PerfPulse）
+# 四份周报 flow + 芯片通识课（AIFrontier / ChinaTech / FinFrontier / PerfPulse / ChipSchool）
 
 每周一自动跑，用 RSS + 官方接口抓取各自领域的动态，交给 DeepSeek 提炼成中文简报，
 发到邮箱（同时把正文备份到 `output/`、原始条目清单作为附件）。
@@ -9,9 +9,10 @@
 | ChinaTech | 国内科技公司与产业：IT之家、爱范儿、极客公园、钛媒体、量子位、雷峰网、OSCHINA、InfoQ 中文 + 新浪滚动 / 36氪热榜（JSON） |
 | FinFrontier | 金融 / 量化 / 市场：CNBC、MarketWatch、FT、The Economist、美联储、Bloomberg、arXiv q-fin、Quantocracy、QuantPedia、Alpha Architect、CoinDesk… |
 | PerfPulse | 硬件 / 微架构 / 系统 / HPC：Phoronix、LWN、kernel.org、SemiEngineering、EE Times、IEEE Spectrum Chips、Chips and Cheese、Tom's Hardware、TechPowerUp、RISC-V、arXiv cs.AR/DC/PF… |
+| ChipSchool | 半导体基础科普系列（15 讲，每讲一个主题）：知识部分讲教科书级共识，每期附 1–2 条真实抓取的芯片新闻做实例解读，每周五自动下一讲 |
 
-> 触发时间已改为：**周一至周四每天早上 08:00（北京时间），由本机 Mac mini 触发**，
-> 不再依赖 GitHub 的定时（原因见下一节）。
+> 触发时间已改为：**周报周一至周四每天早上 08:00、芯片通识课每周五 08:00（均为北京时间），
+> 由本机 Mac mini 触发**，不再依赖 GitHub 的定时（原因见下一节）。
 
 ## 触发方式：本机 launchd（不用 GitHub 定时）
 
@@ -29,7 +30,7 @@
 也就是说「早上 8 点」在 GitHub 上做不到。所以：
 
 - 四个 `*_push.yml` 的 `schedule` 已注释停用（`workflow_dispatch` 保留，手机上仍可手动触发）
-- 改由 Mac mini 上的 launchd 定时，**周一至周四 08:00 本机时区**依次跑四个 flow
+- 改由 Mac mini 上的 launchd 定时：**周一至周四 08:00** 依次跑四个周报，**每周五 08:00** 跑芯片通识课下一讲
 
 ```bash
 # 安装（准备独立克隆 ~/briefings + 密钥模板 + LaunchAgent）
@@ -37,6 +38,14 @@ bash scripts/setup_local_scheduler.sh
 
 # 手动跑一次（不用等到 08:00）
 launchctl kickstart -k "gui/$UID/com.jianzhang.briefings"
+
+# 手动跑芯片通识课（下一讲）
+launchctl kickstart -k "gui/$UID/com.jianzhang.chipschool"
+
+# 芯片通识课指定讲次 / 预览 / 强制推进（详见 --help）
+bash scripts/run_chipschool.sh --lesson 3
+bash scripts/run_chipschool.sh --dry-run
+bash scripts/run_chipschool.sh --force
 
 # 看日志
 tail -f ~/Library/Logs/briefings/$(date +%Y-%m-%d).log

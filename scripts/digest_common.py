@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """RSS 简报类 flow 的公共实现。
 
-AIFrontier / ChinaTech / FinFrontier / PerfPulse 四个周报共用这套逻辑：
+AIFrontier / ChinaTech / FinFrontier / PerfPulse 四个周报 + ChipSchool 通识课共用这套逻辑：
 
 1. **抓取**：并发拉取 RSS/Atom，单源超时保护，记录每个源的健康状况
    （成功 / HTTP 错误 / 解析失败 / 0 条），便于事后体检。
@@ -599,7 +599,7 @@ def main(argv=None) -> int:
     if args.check is None and len(sys.argv) == 1:
         parser.print_help()
         return 0
-    flows = args.check or ["aifrontier", "chinatech", "finfrontier", "perfpulse"]
+    flows = args.check or ["aifrontier", "chinatech", "finfrontier", "perfpulse", "chipschool"]
     bad = check_sources(flows)
     print(f"\n总结：共发现 {bad} 个需要处理的源")
     return 0

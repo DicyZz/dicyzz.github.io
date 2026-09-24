@@ -1,0 +1,46 @@
+name: ChipSchool Weekly Push
+
+# 「芯片通识课」半导体基础科普系列。
+#
+# 每周自动下一讲由本机 Mac mini 的 launchd 负责（进度存在 data/chipschool_state.json，
+# 不进仓库；详见 scripts/setup_local_scheduler.sh + scripts/run_chipschool.sh）：
+#   - 每周五 08:00 自动生成并发送下一讲，成功后进度 +1
+#
+# 这里保留 workflow_dispatch，方便在手机上手动「指定讲次」补发/预览：
+#   - lesson 输入 1–15，会以 --lesson N 模式运行，不影响 Mac mini 的进度
+#   - 手动触发时不会推进 Mac mini 的进度文件
+on:
+  workflow_dispatch:
+    inputs:
+      lesson:
+        description: '指定讲次（1–15）'
+        required: true
+        default: '1'
+
+jobs:
+  generate_and_send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Generator Script
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
+        run: |
+          python scripts/chipschool_push.py --lesson "${{ github.event.inputs.lesson }}"
