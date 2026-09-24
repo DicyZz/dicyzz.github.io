@@ -1,4 +1,4 @@
-name: ChinaTech Weekly Push
+name: GlobalTech Weekly Push (全球科技资讯)
 
 # 定时触发改由本机 Mac mini 负责（周一至周四 08:00 北京时间）：
 #   scripts/setup_local_scheduler.sh   # 安装 launchd 定时
