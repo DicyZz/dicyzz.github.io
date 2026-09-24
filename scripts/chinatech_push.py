@@ -12,7 +12,7 @@ import digest_common as digest  # noqa: E402
 # 读取环境变量
 # ---------------------------------------------------------------------------
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
 
 try:
@@ -166,6 +166,13 @@ def generate_briefing(items, stats):
 2. **智能硬件与消费电子**：Apple、Samsung、华为、小米、OPPO、vivo、大疆、Sony 等公司的新品发布、供应链与市场份额动态。
 3. **AI 与自动驾驶**：OpenAI、Anthropic、Google DeepMind、NVIDIA，以及百度、DeepSeek、月之暗面、智谱、特斯拉、小鹏、理想、蔚来等公司在模型、智能驾驶上的进展。
 4. **芯片与半导体**：NVIDIA、Intel、AMD、TSMC、ASML、三星，以及华为海思、中芯国际、寒武纪等公司的制程、产品与产能进展。
+
+### 绝对红线（防幻觉铁律，优先级高于一切）：
+- 你只能转述【真实抓取数据上下文】中明确出现的信息；公司名、产品名、事件、数字、日期、链接都必须在上下文中能逐字找到对应出处。
+- 上下文里没有的内容一律视为「不存在」。严禁调用你自身训练数据中的任何知识来补写、扩写或"合理推测"新闻事件。
+- 严禁编造任何不存在的公司动态、产品发布、融资、合作、业绩、数据、榜单或时间点。
+- 每条动态必须能回溯到上下文中的某条原始「标题 + 链接」，二者缺一即整条删除。
+- 若抓取到的素材不足或无法核实，宁可少写甚至整块留空，也绝不编造。
 
 ### 内容相关性筛选（逐条判定）：
 本简报聚焦「全球科技公司的实质动态」，每条应至少满足以下之一：

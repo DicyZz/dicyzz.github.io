@@ -11,7 +11,7 @@ import digest_common as digest  # noqa: E402
 # 读取环境变量
 # ---------------------------------------------------------------------------
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
 
 try:

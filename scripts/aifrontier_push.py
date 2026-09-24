@@ -11,7 +11,7 @@ import digest_common as digest  # noqa: E402
 # 读取环境变量
 # ---------------------------------------------------------------------------
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
 
 try:
@@ -135,6 +135,13 @@ def generate_briefing(items, stats):
 2. **Agent 与工具使用**：多智能体系统、ReAct/工具调用、function calling、记忆与规划、编码/浏览/操作类 Agent、评测基准（SWE-bench 等）。
 3. **多模态与生成**：文生图/视频、语音、视觉-语言模型、图像/视频理解、跨模态对齐与统一架构。
 4. **训练与数据**：数据集、训练方法（RLHF/DPO/SFT）、对齐与安全、scaling law、蒸馏、合成数据。
+
+### 绝对红线（防幻觉铁律，优先级高于一切）：
+- 你只能转述【真实抓取数据上下文】中明确出现的信息；公司名、产品名、事件、数字、日期、链接都必须在上下文中能逐字找到对应出处。
+- 上下文里没有的内容一律视为「不存在」。严禁调用你自身训练数据中的任何知识来补写、扩写或"合理推测"新闻事件。
+- 严禁编造任何不存在的公司动态、产品发布、融资、合作、业绩、数据、榜单或时间点。
+- 每条动态必须能回溯到上下文中的某条原始「标题 + 链接」，二者缺一即整条删除。
+- 若抓取到的素材不足或无法核实，宁可少写甚至整块留空，也绝不编造。
 
 ### 内容相关性筛选（逐条判定）：
 本简报聚焦「模型能力与产品/研究新进展」，每条应至少满足以下之一：
