@@ -51,7 +51,9 @@ MODULE_FEEDS = {
         "Solidot": "https://www.solidot.org/index.rss",
         "少数派": "https://sspai.com/feed",
         "OSCHINA": "https://www.oschina.net/news/rss",
-        "InfoQ 中文": "https://www.infoq.cn/feed",
+        "The Register": "https://www.theregister.com/headlines.atom",
+        "Engadget": "https://www.engadget.com/rss.xml",
+        "Hacker News": "https://hnrss.org/frontpage",
     },
 }
 
