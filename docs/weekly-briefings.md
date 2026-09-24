@@ -1,18 +1,26 @@
-# 四份周报 flow + 芯片通识课（AIFrontier / ChinaTech / FinFrontier / PerfPulse / ChipSchool）
+# 五个简报 flow（PerfPulse / AIFrontier / FinFrontier / GlobalTech / ChipSchool）
 
-每周一自动跑，用 RSS + 官方接口抓取各自领域的动态，交给 DeepSeek 提炼成中文简报，
+每天只跑一个 flow，用 RSS + 官方接口抓取各自领域的动态，交给 DeepSeek 提炼成中文简报，
 发到邮箱（同时把正文备份到 `output/`、原始条目清单作为附件）。
 
 | Flow | 领域（只放这个方向的数据源） |
 | --- | --- |
 | AIFrontier | AI 模型 / Agent / 多模态：OpenAI、Google、Meta、NVIDIA、HF、arXiv cs.LG/CL/AI/CV… |
-| ChinaTech | 国内科技公司与产业：IT之家、爱范儿、极客公园、钛媒体、量子位、雷峰网、OSCHINA、InfoQ 中文 + 新浪滚动 / 36氪热榜（JSON） |
+| ChinaTech（GlobalTech） | 全球科技资讯：The Verge、TechCrunch、Ars Technica、Wired、BBC Tech、IT之家、爱范儿、极客公园、钛媒体、量子位、雷峰网、OSCHINA、少数派 + 新浪滚动 / 36氪热榜（JSON） |
 | FinFrontier | 金融 / 量化 / 市场：CNBC、MarketWatch、FT、The Economist、美联储、Bloomberg、arXiv q-fin、Quantocracy、QuantPedia、Alpha Architect、CoinDesk… |
 | PerfPulse | 硬件 / 微架构 / 系统 / HPC：Phoronix、LWN、kernel.org、SemiEngineering、EE Times、IEEE Spectrum Chips、Chips and Cheese、Tom's Hardware、TechPowerUp、RISC-V、arXiv cs.AR/DC/PF… |
 | ChipSchool | 半导体基础科普系列（15 讲，每讲一个主题）：知识部分讲教科书级共识，每期附 1–2 条真实抓取的芯片新闻做实例解读，每周五自动下一讲 |
 
-> 触发时间已改为：**周报周一至周四每天早上 08:00、芯片通识课每周五 08:00（均为北京时间），
-> 由本机 Mac mini 触发**，不再依赖 GitHub 的定时（原因见下一节）。
+> 触发时间（均为北京时间，由本机 Mac mini 触发，一天一个 flow）：
+>
+> | 星期 | 时间 | Flow |
+> | --- | --- | --- |
+> | 周一 | 08:00 | PerfPulse |
+> | 周二 | 08:00 | AIFrontier |
+> | 周三 | 08:00 | FinFrontier |
+> | 周四 | 08:00 | GlobalTech（chinatech） |
+> | 周五 | 08:00 | ChipSchool |
+> | 周六 / 周日 | — | 不安排 |
 
 ## 触发方式：本机 launchd（不用 GitHub 定时）
 
@@ -30,22 +38,22 @@
 也就是说「早上 8 点」在 GitHub 上做不到。所以：
 
 - 四个 `*_push.yml` 的 `schedule` 已注释停用（`workflow_dispatch` 保留，手机上仍可手动触发）
-- 改由 Mac mini 上的 launchd 定时：**周一至周四 08:00** 依次跑四个周报，**每周五 08:00** 跑芯片通识课下一讲
+- 改由 Mac mini 上的 launchd 定时：**周一至周五 08:00**，每天由 `local_briefings.sh` 按星期几分派当天的那个 flow
 
 ```bash
-# 安装（准备独立克隆 ~/briefings + 密钥模板 + LaunchAgent）
+# 一键部署（在 Mac mini 上执行一次：克隆 ~/briefings + 密钥模板 + 安装 LaunchAgent）
 bash scripts/setup_local_scheduler.sh
 
-# 手动跑一次（不用等到 08:00）
+# 手动试跑「今天对应的 flow」（不用等到 08:00）
 launchctl kickstart -k "gui/$UID/com.jianzhang.briefings"
 
-# 手动跑芯片通识课（下一讲）
-launchctl kickstart -k "gui/$UID/com.jianzhang.chipschool"
+# 手动指定某个 flow（不按星期几）
+bash scripts/local_briefings.sh perfpulse    # 或 aifrontier / finfrontier / chinatech / chipschool
 
 # 芯片通识课指定讲次 / 预览 / 强制推进（详见 --help）
-bash scripts/run_chipschool.sh --lesson 3
-bash scripts/run_chipschool.sh --dry-run
-bash scripts/run_chipschool.sh --force
+python scripts/chipschool_push.py --lesson 3
+python scripts/chipschool_push.py --dry-run
+python scripts/chipschool_push.py --force
 
 # 看日志
 tail -f ~/Library/Logs/briefings/$(date +%Y-%m-%d).log
@@ -99,6 +107,10 @@ python scripts/digest_common.py --check perfpulse       # 只看某一个
 
 # 本地跑某个 flow（需要 DEEPSEEK_API_KEY / EMAIL_* 才会真正发信）
 python scripts/perfpulse_push.py
+
+# 按星期几分派（一天一个 flow；手动指定可传 flow 名）
+bash scripts/local_briefings.sh
+bash scripts/local_briefings.sh chipschool
 
 # 单测（含公共模块与 workflow 自检）
 python -m unittest discover -s tests -v

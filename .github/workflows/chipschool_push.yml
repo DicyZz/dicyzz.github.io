@@ -3,7 +3,7 @@ name: ChipSchool Weekly Push
 # 「芯片通识课」半导体基础科普系列。
 #
 # 每周自动下一讲由本机 Mac mini 的 launchd 负责（进度存在 data/chipschool_state.json，
-# 不进仓库；详见 scripts/setup_local_scheduler.sh + scripts/run_chipschool.sh）：
+# 不进仓库；详见 scripts/setup_local_scheduler.sh + scripts/local_briefings.sh）：
 #   - 每周五 08:00 自动生成并发送下一讲，成功后进度 +1
 #
 # 这里保留 workflow_dispatch，方便在手机上手动「指定讲次」补发/预览：
