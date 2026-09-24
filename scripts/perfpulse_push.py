@@ -252,6 +252,14 @@ def main():
         print("⚠️ 未生成 AI 简报，改为发送原始条目清单")
         md_content = fallback_markdown(items, stats)
 
+    md_content, safety = digest.validate_briefing(md_content, items)
+    if safety["hallucinated"]:
+        print(f"🛡️ 防幻觉校验：{safety['ok_links']}/{safety['total_links']} 个链接通过，"
+              f"移除 {safety['hallucinated']} 个不可信链接")
+        for _text, url in safety["removed"]:
+            print(f"   ↳ 已移除: {url}")
+        md_content += digest.hallucination_notice(safety)
+
     digest.save_backup(md_content, date_str,
                        os.path.join(BACKUP_DIR, f"{FLOW_NAME}_{date_str}.md"))
 

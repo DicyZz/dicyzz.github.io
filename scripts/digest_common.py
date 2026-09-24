@@ -480,6 +480,66 @@ def send_email(subject: str, html: str, plain_text: str,
         return False
 
 
+# ---------------------------------------------------------------------------
+# 防幻觉校验：模型输出的每个链接都必须能在真实抓取条目中找到出处
+# ---------------------------------------------------------------------------
+_MD_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)\s]+)\)")
+
+
+def extract_markdown_links(md_text: str) -> list:
+    """提取 Markdown 正文里的全部 `[文字](链接)`。"""
+    return [(text, url) for text, url in _MD_LINK_RE.findall(md_text or "")]
+
+
+def validate_briefing(md_content: str, items: list) -> tuple:
+    """防幻觉兜底：校验模型输出中的链接是否全部来自真实抓取条目。
+
+    原理：简报正文要求每条必附来源链接，若模型编造了公司/产品/事件，
+    它给出的链接也必然不在抓取来源里。因此「链接白名单」能有效拦截幻觉。
+
+    处理策略：
+    - 链接命中白名单 → 保留。
+    - 链接不在白名单 → 判定为幻觉，把 `[文字](链接)` 降级为纯文字（去掉不可信
+      链接），并在报告中记录，最后以 notice 形式附到正文末尾提示读者。
+
+    返回 (清洗后的 md, 报告 dict)。
+    """
+    known = {item.get("link", "").strip() for item in items if item.get("link")}
+    known |= {_link_key(item.get("link", "")) for item in items if item.get("link")}
+
+    links = extract_markdown_links(md_content)
+    hallucinated = []
+    for text, url in links:
+        url_stripped = url.strip()
+        if url_stripped in known or _link_key(url_stripped) in known:
+            continue
+        hallucinated.append((text, url_stripped))
+
+    cleaned = md_content or ""
+    for text, url in hallucinated:
+        # 精确替换该链接，避免误伤正文中相同的纯文字
+        cleaned = cleaned.replace(f"[{text}]({url})", text)
+
+    report = {
+        "total_links": len(links),
+        "ok_links": len(links) - len(hallucinated),
+        "hallucinated": len(hallucinated),
+        "removed": hallucinated,
+    }
+    return cleaned, report
+
+
+def hallucination_notice(report: dict) -> str:
+    """生成防幻觉校验提示，未发现问题时返回空字符串。"""
+    if not report.get("hallucinated"):
+        return ""
+    n = report["hallucinated"]
+    return (
+        f"\n\n> ⚠️ **防幻觉校验**：本期简报中检测到 {n} 个链接未出现在本期真实抓取来源里，"
+        "已自动移除对应链接并仅保留文字说明。\n"
+    )
+
+
 def save_backup(markdown_text: str, date_str: str, path: str) -> None:
     """把简报正文落盘备份（workflow 会把它作为 artifact 上传）。"""
     try:
