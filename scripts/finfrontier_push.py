@@ -43,6 +43,8 @@ MODULE_FEEDS = {
         "The Economist Finance": "https://www.economist.com/finance-and-economics/rss.xml",
         "Federal Reserve Press": "https://www.federalreserve.gov/feeds/press_all.xml",
         "Bloomberg Markets": "https://feeds.bloomberg.com/markets/news.rss",
+        "Financial Times Alphaville": "https://www.ft.com/rss/alphaville",
+        "Wolf Street": "https://wolfstreet.com/feed/",
         "ArXiv General Finance (q-fin.GN/EC)": "https://export.arxiv.org/api/query?search_query=cat:q-fin.GN+OR+cat:q-fin.EC&sortBy=submittedDate&sortOrder=descending&max_results=15",
     },
 
@@ -57,6 +59,9 @@ MODULE_FEEDS = {
     # === 金融科技 ===
     "Fintech": {
         "The Fintech Times": "https://thefintechtimes.com/feed/",
+        "Finextra": "https://www.finextra.com/rss/headlines.aspx",
+        "PYMNTS": "https://www.pymnts.com/feed/",
+        "Crowdfund Insider": "https://www.crowdfundinsider.com/feed/",
     },
 
     # === 加密与数字资产 ===
@@ -64,6 +69,7 @@ MODULE_FEEDS = {
         "CoinDesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
         "CoinTelegraph": "https://cointelegraph.com/rss",
         "Decrypt": "https://decrypt.co/feed",
+        "The Block": "https://www.theblock.co/rss.xml",
     },
 }
 
@@ -128,7 +134,7 @@ def generate_briefing(items, stats):
 1. **客观语气与进展限定**：严禁将“预测”、“推测”、“初步研究”撰写为“已经发生”或“确定结论”；对前瞻性观点必须标注为预期/预测。
 2. **区分官方与第三方**：对于分析师观点、民间量化社区、非官方评测，必须明确标注“第三方/机构观点/预测”。
 3. **静默跳过法则**：若某个方向在今日抓取数据中完全没有对应资讯，直接静默忽略该方向标题，严禁输出“无相关内容”。
-4. **来源链接强制要求**：每条新闻/论文/发布必须在正文中以 Markdown 链接形式附上【真实抓取数据上下文】中的原始链接，格式为 `[原文](链接)`。若某条资讯在上下文中没有链接，或链接与内容对不上，直接整条剔除，严禁凭记忆补写链接、数字或来源名称。
+4. **来源链接强制要求**：每条新闻/论文/发布必须在正文中以 Markdown 链接形式附上【真实抓取数据上下文】中的原始链接，格式为 `[文章标题](链接)`。若某条资讯在上下文中没有链接，或链接与内容对不上，直接整条剔除，严禁凭记忆补写链接、数字或来源名称。
 5. **格式规范**：全局严禁使用任何项目符号（`-`、`*`）或数字列表序号（`1.`、`2.`）。代码片段必须包裹在标准 Markdown 代码块中。
 
 ---
@@ -146,13 +152,14 @@ def generate_briefing(items, stats):
 ## 加密与数字资产 (Crypto & Digital Assets)
 
 每条统一格式（正文段落，禁止用项目符号或编号列表）：
-直接用 2-4 句话依次说明「这是什么 → 核心信息/数据 → 可验证的具体数字或事件（有则写准确数字）→ 局限或适用条件（如有）」，末尾统一用 `[原文](原始链接)` 收尾。
+直接用 2-4 句话依次说明「这是什么 → 核心信息/数据 → 可验证的具体数字或事件（有则写准确数字）→ 局限或适用条件（如有）」，末尾统一用 `[文章标题](原始链接)` 收尾。
 
 来源类型标注：每个方向内可混有官方新闻、量化博客与学术预印本，请在描述中用自然语言点明来源性质——官方发布直接陈述，第三方量化博客标注「第三方/机构观点」，arXiv 论文标注「预印本研究」；切勿把预印本结论写成确定事实。
 
 链接规范（非常重要）：
-- 链接文字一律写固定词 `原文`，**严禁用文章标题作为链接文字**。标题常含 `[`、`]`、`(`、`"` 等特殊字符，会破坏 Markdown 解析。
-- 若需点明条目标题，在描述正文中用普通文字自然写出即可，不要加粗、不要做成链接。
+- 链接文字必须使用该条目的【文章标题】，格式为 `[文章标题](原始链接)`，**严禁使用固定词 `原文`**。
+- 若标题中含 `[`、`]`、`(`、`)`、`"` 等会破坏 Markdown 解析的特殊字符，请去除这些字符后再作为链接文字。
+- 链接文字需与文章内容一致，严禁编造标题；若该条资讯在上下文中没有标题或链接，直接整条剔除。
 - 每个板块标题 `##` 必须独占一行，严禁被前一条的链接或正文吞并。
 
 风格要求：

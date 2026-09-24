@@ -47,20 +47,20 @@ MODULE_FEEDS = {
         "NVIDIA Developer Blog": "https://developer.nvidia.com/blog/feed/",
         "Apple Machine Learning Research": "https://machinelearning.apple.com/rss.xml",
         "AWS Machine Learning Blog": "https://aws.amazon.com/blogs/machine-learning/feed/",
+        "TechCrunch AI": "https://techcrunch.com/category/artificial-intelligence/feed/",
     },
 
     # === 深度文章 / 技术博客 (权威学者与顶级学术机构) ===
     "Blog_Posts": {
-        "Lil'Log (Lilian Weng)": "https://lilianweng.github.io/index.xml",
-        "BAIR (Berkeley AI Research)": "https://bair.berkeley.edu/blog/feed.xml",
         "Together AI Blog": "https://www.together.ai/blog/rss.xml",
-        "The Gradient": "https://thegradient.pub/rss/",
         "Import AI (Jack Clark)": "https://jack-clark.net/feed/",
-        "Jay Alammar Blog": "https://jalammar.github.io/feed.xml",
-        "Ahead of AI (Sebastian Raschka)": "https://magazine.sebastianraschka.com/feed",
-        "Chip Huyen Blog": "https://huyenchip.com/feed.xml",
         "Simon Willison": "https://simonwillison.net/atom/everything/",
-        "Eugene Yan": "https://eugeneyan.com/rss/",
+        "Interconnects": "https://www.interconnects.ai/feed",
+        "Latent Space": "https://www.latent.space/feed",
+        "Machine Learning Mastery": "https://machinelearningmastery.com/feed/",
+        "Stratechery": "https://stratechery.com/feed/",
+        "MarkTechPost": "https://www.marktechpost.com/feed/",
+        "AI News": "https://www.artificialintelligence-news.com/feed/",
         "Hacker News AI": "https://hnrss.org/newest?q=LLM+OR+agent+OR+multimodal",
     },
 
@@ -151,7 +151,7 @@ def generate_briefing(items, stats):
 1. **客观语气与进展限定**：严禁将“实验”、“讨论”、“初步探究”撰写为“成功落地”或“重大突破”。
 2. **区分民间与官方**：对于民间第三方开源项目或非官方评测，必须明确标注“第三方社区/个人观点”。
 3. **静默跳过法则**：若某个领域在今日抓取数据中完全没有对应资讯，直接静默忽略该板块标题，严禁输出“无相关内容”。
-4. **来源链接强制要求**：每条新闻/论文/发布必须在正文中以 Markdown 链接形式附上【真实抓取数据上下文】中的原始链接，格式为 `[原文](链接)`。若某条资讯在上下文中没有链接，或链接与内容对不上，直接整条剔除，严禁凭记忆补写链接、PR 编号或开发者姓名。
+4. **来源链接强制要求**：每条新闻/论文/发布必须在正文中以 Markdown 链接形式附上【真实抓取数据上下文】中的原始链接，格式为 `[文章标题](链接)`。若某条资讯在上下文中没有链接，或链接与内容对不上，直接整条剔除，严禁凭记忆补写链接、PR 编号或开发者姓名。
 5. **格式规范**：全局严禁使用任何项目符号（`-`、`*`）或数字列表序号（`1.`、`2.`）。代码片段必须包裹在标准 Markdown 代码块中。
 
 ---
@@ -169,14 +169,14 @@ def generate_briefing(items, stats):
 ## 其他资料 (Other Materials)
 
 每条统一格式（正文段落，禁止用项目符号或编号列表）：
-直接用 2-4 句话依次说明「这是什么 → 核心能力/技术点 → 可验证的评测数据或能力描述（有则写具体数字/榜单/基准）→ 局限或适用条件（如有）」，末尾统一用 `[原文](原始链接)` 收尾。
+直接用 2-4 句话依次说明「这是什么 → 核心能力/技术点 → 可验证的评测数据或能力描述（有则写具体数字/榜单/基准）→ 局限或适用条件（如有）」，末尾统一用 `[文章标题](原始链接)` 收尾。
 
 链接规范（非常重要）：
-- 链接文字一律写固定词 `原文`，**严禁用文章标题作为链接文字**。标题常含 `[`、`]`、`(`、`"` 等特殊字符，会破坏 Markdown 解析。
-- 若需点明条目标题，在描述正文中用普通文字自然写出即可，不要加粗、不要做成链接。
+- 链接文字必须使用该条目的【文章标题】，格式为 `[文章标题](原始链接)`，**严禁使用固定词 `原文`**。
+- 若标题中含 `[`、`]`、`(`、`)`、`"` 等会破坏 Markdown 解析的特殊字符，请去除这些字符后再作为链接文字。
+- 链接文字需与文章内容一致，严禁编造标题；若该条资讯在上下文中没有标题或链接，直接整条剔除。
 - 每个板块标题 `##` 必须独占一行，严禁被前一条的链接或正文吞并。
-
-如为视频/工具类，链接文字可写 `原文` 或 `视频` / `GitHub` 等不含特殊字符的固定词。
+- 如为 GitHub 发布/工具类且无正式标题，链接文字可写仓库名或 `GitHub`，但优先使用实际标题。
 
 风格要求：
 - 精炼优先：每个板块最多只保留 2-4 条最有价值、最相关的内容，整份简报总条目控制在 8-10 条以内，严格「宁可少而精」，宁可整块留空也不要凑数。
