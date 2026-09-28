@@ -123,11 +123,10 @@ def generate_briefing(items, stats):
         base_url="https://api.deepseek.com"
     )
 
-    # exact_iso_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # 动态获取当前时间与 7 天前的 ISO 格式时间字符
+    # 1. 先计算时间变量（确保 UTC 时区与 7 天窗口）
     now = datetime.datetime.now(datetime.timezone.utc)
-    seven_days_ago = now - datetime.timedelta(days=7)
+    exact_iso_time = now.isoformat()
+    seven_days_ago_time = (now - datetime.timedelta(days=7)).isoformat()
 
     Briefing_prompt = f"""
 你是一个严谨的系统架构师与 HPC/LLM 硬件加速专家，负责为技术团队撰写《PerfPulse 软硬件性能与架构简报》。
