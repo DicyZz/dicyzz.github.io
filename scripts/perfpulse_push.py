@@ -7,6 +7,7 @@ from openai import OpenAI
 # 并发抓取 / 去重 / 渲染 / 发送等通用能力见 scripts/digest_common.py
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import digest_common as digest  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # 读取环境变量
 # ---------------------------------------------------------------------------
@@ -97,6 +98,7 @@ MODULE_FEEDS = {
     }
 }
 
+
 # ---------------------------------------------------------------------------
 # 1. 抓取本 flow 的专属数据源
 # ---------------------------------------------------------------------------
@@ -105,6 +107,7 @@ def fetch_all_feeds():
     return digest.collect(MODULE_FEEDS)
 
 
+# ---------------------------------------------------------------------------
 # 2. DeepSeek 生成文字简报
 # ---------------------------------------------------------------------------
 def generate_briefing(items, stats):
@@ -220,10 +223,6 @@ def generate_briefing(items, stats):
 
 
 # ---------------------------------------------------------------------------
-# 3. 邮件渲染与发送 (已移除 MP3 附件逻辑)
-
-
-# ---------------------------------------------------------------------------
 # 3. 备份 / 渲染 / 发送（通用实现见 scripts/digest_common.py）
 # ---------------------------------------------------------------------------
 FLOW_NAME = "perfpulse"
@@ -253,10 +252,10 @@ def main():
         md_content = fallback_markdown(items, stats)
 
     md_content, safety = digest.validate_briefing(md_content, items)
-    if safety["hallucinated"]:
-        print(f"🛡️ 防幻觉校验：{safety['ok_links']}/{safety['total_links']} 个链接通过，"
-              f"移除 {safety['hallucinated']} 个不可信链接")
-        for _text, url in safety["removed"]:
+    if safety.get("hallucinated", 0) > 0:
+        print(f"🛡️ 防幻觉校验：{safety.get('ok_links', 0)}/{safety.get('total_links', 0)} 个链接通过，"
+              f"移除 {safety.get('hallucinated', 0)} 个不可信链接")
+        for _text, url in safety.get("removed", []):
             print(f"   ↳ 已移除: {url}")
         md_content += digest.hallucination_notice(safety)
 
