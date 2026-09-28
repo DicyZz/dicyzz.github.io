@@ -1,6 +1,7 @@
 import os
 import sys
 import datetime
+import traceback
 
 from openai import OpenAI
 
@@ -120,7 +121,8 @@ def generate_briefing(items, stats):
 
     client = OpenAI(
         api_key=DEEPSEEK_API_KEY,
-        base_url="https://api.deepseek.com"
+        base_url="https://api.deepseek.com",
+        timeout=90.0
     )
 
     # 1. 先计算时间变量（确保 UTC 时区与 7 天窗口）
@@ -128,7 +130,7 @@ def generate_briefing(items, stats):
     exact_iso_time = now.isoformat()
     seven_days_ago_time = (now - datetime.timedelta(days=7)).isoformat()
 
-    Briefing_prompt = f"""
+    briefing_prompt = f"""
 你是一个严谨的系统架构师与 HPC/LLM 硬件加速专家，负责为技术团队撰写《PerfPulse 软硬件性能与架构简报》。
 当前准确时间（UTC）：{exact_iso_time}。
 本次简报检索时间窗口范围：{seven_days_ago_time} 至 {exact_iso_time}（仅限过去 7 天内发生的动态）。
@@ -232,7 +234,8 @@ def generate_briefing(items, stats):
         print("✅ 多源简报文字生成成功！")
         return md_content.strip()
     except Exception as e:
-        print(f"⚠️ DeepSeek 生成失败: {e}，改为发送原始条目")
+        print(f"⚠️ DeepSeek 生成失败: {e}")
+        traceback.print_exc()
         return None
 
 
