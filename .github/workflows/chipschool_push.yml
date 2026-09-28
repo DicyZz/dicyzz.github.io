@@ -1,4 +1,4 @@
-name: ChipSchool Weekly Push
+Name: ChipSchool Weekly Push
 
 # 「芯片通识课」半导体基础科普系列。
 #
@@ -42,5 +42,6 @@ jobs:
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
+          LESSON_INPUT: ${{ github.event.inputs.lesson }}
         run: |
-          python scripts/chipschool_push.py --lesson "${{ github.event.inputs.lesson }}"
+          python scripts/chipschool_push.py --lesson "$LESSON_INPUT"
