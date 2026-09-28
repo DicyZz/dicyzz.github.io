@@ -258,7 +258,7 @@ def fallback_markdown(items, stats):
 
 
 def main():
-    date_str = datetime.now().strftime("%Y-%m-%d")
+    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
     items, stats = fetch_all_feeds()
 
     md_content = generate_briefing(items, stats)
