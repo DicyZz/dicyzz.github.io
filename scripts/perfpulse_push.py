@@ -123,11 +123,17 @@ def generate_briefing(items, stats):
         base_url="https://api.deepseek.com"
     )
 
-    exact_iso_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # exact_iso_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    briefing_prompt = f"""
+    # 动态获取当前时间与 7 天前的 ISO 格式时间字符串
+    now = datetime.datetime.now(datetime.timezone.utc)
+    exact_iso_time = now.isoformat()
+    seven_days_ago_time = (now - datetime.timedelta(days=7)).isoformat()
+
+    Briefing_prompt = f"""
 你是一个严谨的系统架构师与 HPC/LLM 硬件加速专家，负责为技术团队撰写《PerfPulse 软硬件性能与架构简报》。
-当前时间：{exact_iso_time}。
+当前准确时间（UTC）：{exact_iso_time}。
+本次简报检索时间窗口范围：{seven_days_ago_time} 至 {exact_iso_time}（仅限过去 7 天内发生的动态）。
 
 ### 核心任务：
 基于下方【真实抓取数据上下文】，整理一份【PerfPulse 每周架构与系统性能简报】。
@@ -144,7 +150,11 @@ def generate_briefing(items, stats):
 3. **HPC 与编译优化**：LLVM/MLIR Passes、Loop Transformations (Tiling, Unrolling, Fusion)、Triton/TVM/XLA 代码生成、CUDA/ROCm/SYCL 内核优化、MPI/NCCL 通信重叠。
 4. **Linux Kernel & Performance**：eBPF/XDP、io_uring、Memory Management (THP, NUMA balancing, ZSWAP)、Scheduler (EEVDF)、Filesystem/Block Layer (bcachefs, NVMe-oF)、perf/BPF 性能分析。
 
-### 性能相关性强过滤（最高优先级，逐条判定）：
+### 🕒 时间窗口硬性过滤规则（最高优先级之一）：
+1. **严格 7 天限制**：逐条检查【真实抓取数据上下文】中每条资讯的发布时间（PubDate/Timestamp/Date）。如果发布时间早于 {seven_days_ago_time}，或晚于当前时间 {exact_iso_time}（虚构的未来时间），必须完全整条剔除，严禁收录到简报中。
+2. **时间事实审判**：若资讯中未明确标注时间，且根据上下文无法推断其属于过去 7 天内的最新动态，视为无效过期资讯并直接静默抛弃。
+
+### ⚡ 性能相关性强过滤（逐条判定）：
 本简报只收录「与性能提升直接相关」的内容，即必须至少满足以下之一：
 - 包含具体的性能收益数据（吞吐、延迟、IPC、带宽、功耗、编译/训练/推理耗时等）；
 - 描述可落地的优化技术或机制（Cache/流水线/并行化/量化/KV Cache/调度/编译器 Pass/内核调优等）；
@@ -160,11 +170,10 @@ def generate_briefing(items, stats):
 - 消费级硬件评测（电源、散热器、外设、普通显示器）。
 - 商业公关讲话、融资新闻、营销软文。
 
-
-### 核心防幻觉与事实审判法则：
+### 🛡️ 核心防幻觉与事实审判法则：
 1. **客观语气与进展限定**：严禁将“实验”、“讨论”、“初步探究”撰写为“成功落地”或“重大突破”。
 2. **区分民间与官方**：对于民间第三方开源项目或非官方评测，必须明确标注“第三方社区/个人观点”。
-3. **静默跳过法则**：若某个领域在今日抓取数据中完全没有对应资讯，直接静默忽略该板块标题，严禁输出“无相关内容”。
+3. **静默跳过法则**：若某个领域在抓取数据中没有过去 7 天内的对应资讯，直接静默忽略该板块标题，严禁输出“无相关内容”等废话。
 4. **来源链接强制要求**：每条新闻/论文/发布必须在正文中以 Markdown 链接形式附上【真实抓取数据上下文】中的原始链接，格式为 `[标题](链接)`。若某条资讯在上下文中没有链接，或链接与内容对不上，直接整条剔除，严禁凭记忆补写链接、PR 编号或开发者姓名。
 5. **格式规范**：全局严禁使用任何项目符号（`-`、`*`）或数字列表序号（`1.`、`2.`）。代码片段必须包裹在标准 Markdown 代码块中。
 
