@@ -31,10 +31,14 @@ EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")
 MODULE_FEEDS = {
     # === 新闻与发布 ===
     "News": {
+        "Digitimes (semiconductor)": "https://www.digitimes.com/rss/daily.xml",
+        "eeNews Europe (semiconductor)": "https://www.eenewseurope.com/en/feed/",
         "Phoronix Processors": "https://www.phoronix.com/rss.php",
         "LWN.net (Linux Kernel Direct)": "https://lwn.net/headlines/rss",
         "Kernel.org Releases": "https://www.kernel.org/feeds/kdist.xml",
         "SemiEngineering": "https://semiengineering.com/feed/",
+        "Semiconductor Digest": "https://www.semiconductor-digest.com/feed/",
+        "SemiWiki (semiconductor)": "https://semiwiki.com/feed/",
         "EE Times Global": "https://www.eetimes.com/feed/",
         "IEEE Spectrum Chips": "https://spectrum.ieee.org/feeds/topic/semiconductors.rss",
         "RISC-V International": "https://riscv.org/feed/",
@@ -50,6 +54,7 @@ MODULE_FEEDS = {
         "DeepSpeed Blog": "https://www.deepspeed.ai/feed.xml",
         "Easyperf (Denis Bakhvalov)": "https://easyperf.net/feed.xml",
         "Fabian Giesen (ryg)": "https://fgiesen.wordpress.com/feed/",
+        "Fabricated Knowledge (chips)": "https://fabricatedknowledge.substack.com/feed",
         "Glenn Klockwood (HPC/storage)": "https://blog.glennklockwood.com/feeds/posts/default",
         "Herb Sutter": "https://herbsutter.com/feed/",
         "High Scalability": "https://highscalability.com/feed/",
@@ -147,6 +152,7 @@ def generate_briefing(items, stats):
 2. **CPU/GPU 微架构**：Cache Hierarchy (L1/L2/L3/SLC)、Branch Predictor、Out-of-Order Execution、ROB/Execution Units、Vector/Matrix Extensions (AVX-512, AMX, SVE, Tensor Cores)、Interconnect (NVLink, CXL, PCIe Gen6)。
 3. **HPC 与编译优化**：LLVM/MLIR Passes、Loop Transformations (Tiling, Unrolling, Fusion)、Triton/TVM/XLA 代码生成、CUDA/ROCm/SYCL 内核优化、MPI/NCCL 通信重叠。
 4. **Linux Kernel & Performance**：eBPF/XDP、io_uring、Memory Management (THP, NUMA balancing, ZSWAP)、Scheduler (EEVDF)、Filesystem/Block Layer (bcachefs, NVMe-oF)、perf/BPF 性能分析。
+5. **半导体工艺与封装**：先进制程 (GAA/CFET/2nm)、光刻 (EUV/High-NA)、先进封装 (CoWoS/SoIC/Chiplet)、存储 (HBM/DRAM/NAND/3D)、晶圆代工与设备、器件物理。
 
 ### 🕒 时间窗口硬性过滤规则：
 1. **严格 7 天限制**：逐条检查【真实抓取数据上下文】中每条资讯的发布时间。如果发布时间早于 {seven_days_ago_time}，或晚于当前时间 {exact_iso_time}，必须完全整条剔除。
