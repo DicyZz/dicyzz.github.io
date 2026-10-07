@@ -37,7 +37,6 @@ MODULE_FEEDS = {
         "SemiEngineering": "https://semiengineering.com/feed/",
         "EE Times Global": "https://www.eetimes.com/feed/",
         "IEEE Spectrum Chips": "https://spectrum.ieee.org/feeds/topic/semiconductors.rss",
-        "ServeTheHome (STH)": "https://www.servethehome.com/feed/",
         "RISC-V International": "https://riscv.org/feed/",
         "LLVM Weekly": "https://llvmweekly.org/rss.xml",
         "OpenAI Research": "https://openai.com/news/rss.xml",
@@ -45,29 +44,35 @@ MODULE_FEEDS = {
 
     # === 深度文章 / 性能博客 ===
     "Blog_Posts": {
+        "ACM SIGARCH (architecture)": "https://www.sigarch.org/feed/",
         "Brendan Gregg Performance Blog": "https://www.brendangregg.com/blog/rss.xml",
-        "Easyperf (Denis Bakhvalov)": "https://easyperf.net/feed.xml",
         "Chips and Cheese": "https://chipsandcheese.com/feed/",
-        "TechPowerUp": "https://www.techpowerup.com/rss/news",
-        "Johnny's Software Lab": "https://johnysswlab.com/feed/",
+        "DeepSpeed Blog": "https://www.deepspeed.ai/feed.xml",
+        "Easyperf (Denis Bakhvalov)": "https://easyperf.net/feed.xml",
+        "Fabian Giesen (ryg)": "https://fgiesen.wordpress.com/feed/",
+        "Glenn Klockwood (HPC/storage)": "https://blog.glennklockwood.com/feeds/posts/default",
         "Herb Sutter": "https://herbsutter.com/feed/",
-        "Real World Tech": "https://www.realworldtech.com/feed/",
-        "Travis Downs (perf analysis)": "https://travisdowns.github.io/feed.xml",
+        "High Scalability": "https://highscalability.com/feed/",
+        "Hugging Face Blog": "https://huggingface.co/blog/feed.xml",
         "Jeff Preshing (concurrency/perf)": "https://preshing.com/feed/",
         "John Regehr (compilers)": "https://blog.regehr.org/feed/",
-        "High Scalability": "https://highscalability.com/feed/",
-        "SemiAnalysis (chips/inference)": "https://semianalysis.com/feed/",
-        "Lobsters (performance)": "https://lobste.rs/t/performance.rss",
+        "Johnny's Software Lab": "https://johnysswlab.com/feed/",
         "Lobsters (compilers)": "https://lobste.rs/t/compilers.rss",
-        "Glenn Klockwood (HPC/storage)": "https://blog.glennklockwood.com/feeds/posts/default",
-        "Scientific Computing in Rust": "https://scientificcomputing.rs/monthly/rss.xml",
-        "Cloudflare Tech Blog": "https://blog.cloudflare.com/rss/",
-        "Netflix Tech Blog": "https://netflixtechblog.com/feed",
-        "Databricks Engineering": "https://www.databricks.com/feed",
-        "DeepSpeed Blog": "https://www.deepspeed.ai/feed.xml",
-        "NVIDIA Developer Blog": "https://developer.nvidia.com/blog/feed/",
+        "Lobsters (performance)": "https://lobste.rs/t/performance.rss",
+        "MaskRay (compiler/linker)": "https://maskray.me/blog/atom.xml",
+        "Matt Godbolt (compilers/xania)": "https://xania.org/feed.atom",
         "Meta Engineering": "https://engineering.fb.com/feed/",
+        "Netflix Tech Blog": "https://netflixtechblog.com/feed",
+        "NVIDIA Developer Blog": "https://developer.nvidia.com/blog/feed/",
+        "Paul E. McKenney (kernel/RCU)": "https://paulmck.livejournal.com/data/rss",
+        "PyTorch Blog (ML systems)": "https://pytorch.org/blog/feed.xml",
+        "Real World Tech": "https://www.realworldtech.com/feed/",
         "Rust Compiler & Performance": "https://blog.rust-lang.org/feed.xml",
+        "Scientific Computing in Rust": "https://scientificcomputing.rs/monthly/rss.xml",
+        "SemiAnalysis (chips/inference)": "https://semianalysis.com/feed/",
+        "Simon Willison (LLM)": "https://simonwillison.net/atom/everything/",
+        "The Chip Letter (Substack)": "https://thechipletter.substack.com/feed",
+        "Travis Downs (perf analysis)": "https://travisdowns.github.io/feed.xml",
     },
 
     # === 论文 ===
@@ -86,6 +91,7 @@ MODULE_FEEDS = {
         "TensorRT-LLM GitHub Releases": "https://github.com/NVIDIA/TensorRT-LLM/releases.atom",
         "llama.cpp GitHub Releases": "https://github.com/ggml-org/llama.cpp/releases.atom",
         "NVIDIA TensorRT Releases": "https://github.com/NVIDIA/TensorRT/releases.atom",
+        "Hacker News Systems Tech": "https://news.ycombinator.com/rss",
     }
 }
 
@@ -151,7 +157,9 @@ def generate_briefing(items, stats):
 - 商业、营销、营收、市场预测、资本开支、创业竞赛、公关活动、展会开业；
 - 政策建议、国家战略、生态演讲、政府/联合国发言、行业报告、社区拨款/人事变更；
 - 无具体性能数据/无机制分析的普通产品发布、功能迭代、UI 升级、CMS 框架更新；
-- 消费级硬件评测（笔记本促销、主板/工作站外观评测、散热器、外设、普通显示器、移动端手机 Soc 基础发布）；
+- 硬件评测与上手（笔记本/手机促销、主板/工作站/服务器/SSD/整机/网卡等外观或跑分评测，即使带 benchmark 数字也整条剔除）；
+- 产品定价、涨价、促销、折扣、SKU 性价比/价值分析、市场行情；
+- 厂商赞助或实验室营销软文（只有“X 倍提升 / 更高效”这类宣称，却无底层技术机制的软文）；
 - 泛 IT 趣闻与非性能项目（手绘地图、TUI 客户端、IRC 聊天、Postgres/CSS 技巧）；
 - 上层应用业务案例（法律、医疗、办公、车队管理、视频剪辑应用）；
 - Web 开发、SaaS 应用、云服务规则（如 Cloudflare 规则、Turnstile、CDN 托管等）。
