@@ -35,14 +35,12 @@ MODULE_FEEDS = {
         "LWN.net (Linux Kernel Direct)": "https://lwn.net/headlines/rss",
         "Kernel.org Releases": "https://www.kernel.org/feeds/kdist.xml",
         "SemiEngineering": "https://semiengineering.com/feed/",
-        "The Next Platform": "https://www.nextplatform.com/feed/",
         "EE Times Global": "https://www.eetimes.com/feed/",
         "IEEE Spectrum Chips": "https://spectrum.ieee.org/feeds/topic/semiconductors.rss",
         "ServeTheHome (STH)": "https://www.servethehome.com/feed/",
         "RISC-V International": "https://riscv.org/feed/",
         "LLVM Weekly": "https://llvmweekly.org/rss.xml",
         "OpenAI Research": "https://openai.com/news/rss.xml",
-        "Google AI Blog": "https://research.google/blog/rss/",
     },
 
     # === 深度文章 / 性能博客 ===
@@ -51,32 +49,25 @@ MODULE_FEEDS = {
         "Easyperf (Denis Bakhvalov)": "https://easyperf.net/feed.xml",
         "Chips and Cheese": "https://chipsandcheese.com/feed/",
         "TechPowerUp": "https://www.techpowerup.com/rss/news",
-        "MaskRay (compiler/linker)": "https://maskray.me/blog/atom.xml",
         "Johnny's Software Lab": "https://johnysswlab.com/feed/",
-        "Fabian Giesen (ryg)": "https://fgiesen.wordpress.com/feed/",
         "Herb Sutter": "https://herbsutter.com/feed/",
         "Real World Tech": "https://www.realworldtech.com/feed/",
         "Travis Downs (perf analysis)": "https://travisdowns.github.io/feed.xml",
         "Jeff Preshing (concurrency/perf)": "https://preshing.com/feed/",
         "John Regehr (compilers)": "https://blog.regehr.org/feed/",
-        "Paul E. McKenney (kernel/RCU)": "https://paulmck.livejournal.com/data/rss",
         "High Scalability": "https://highscalability.com/feed/",
         "SemiAnalysis (chips/inference)": "https://semianalysis.com/feed/",
-        "Matt Godbolt (compilers/xania)": "https://xania.org/feed.atom",
-        "The Chip Letter (Substack)": "https://thechipletter.substack.com/feed",
         "Lobsters (performance)": "https://lobste.rs/t/performance.rss",
         "Lobsters (compilers)": "https://lobste.rs/t/compilers.rss",
         "Glenn Klockwood (HPC/storage)": "https://blog.glennklockwood.com/feeds/posts/default",
         "Scientific Computing in Rust": "https://scientificcomputing.rs/monthly/rss.xml",
         "Cloudflare Tech Blog": "https://blog.cloudflare.com/rss/",
         "Netflix Tech Blog": "https://netflixtechblog.com/feed",
-        "Hugging Face Blog": "https://huggingface.co/blog/feed.xml",
         "Databricks Engineering": "https://www.databricks.com/feed",
         "DeepSpeed Blog": "https://www.deepspeed.ai/feed.xml",
         "NVIDIA Developer Blog": "https://developer.nvidia.com/blog/feed/",
         "Meta Engineering": "https://engineering.fb.com/feed/",
         "Rust Compiler & Performance": "https://blog.rust-lang.org/feed.xml",
-        "Tom's Hardware": "https://www.tomshardware.com/feeds/all",
     },
 
     # === 论文 ===
@@ -95,7 +86,6 @@ MODULE_FEEDS = {
         "TensorRT-LLM GitHub Releases": "https://github.com/NVIDIA/TensorRT-LLM/releases.atom",
         "llama.cpp GitHub Releases": "https://github.com/ggml-org/llama.cpp/releases.atom",
         "NVIDIA TensorRT Releases": "https://github.com/NVIDIA/TensorRT/releases.atom",
-        "Hacker News Systems Tech": "https://news.ycombinator.com/rss",
     }
 }
 
@@ -165,6 +155,7 @@ def generate_briefing(items, stats):
 - 泛 IT 趣闻与非性能项目（手绘地图、TUI 客户端、IRC 聊天、Postgres/CSS 技巧）；
 - 上层应用业务案例（法律、医疗、办公、车队管理、视频剪辑应用）；
 - Web 开发、SaaS 应用、云服务规则（如 Cloudflare 规则、Turnstile、CDN 托管等）。
+- 硬性数量上限：本期整篇最多保留 **16 条**；其中 `## 新闻与发布` 最多 8 条、`## 深度文章` 最多 6 条、`## 论文` 与 `## 其他资料` 各最多 4 条。超出部分按相关性从低到高静默删除，宁少勿多。
 
 ### 🛡️ 核心防幻觉与事实审判法则：
 1. **静默跳过无数据说明**：如果某条资讯虽然沾边，但通篇只有“旨在提升性能”而没有写出具体的**底层机制**或**量化数据/对比基准**，**直接静默剔除该条**。
@@ -172,6 +163,13 @@ def generate_briefing(items, stats):
 3. **动态板块选择**：只保留筛选后确实包含高质量条目的二级标题板块（`## 新闻与发布`、`## 深度文章`、`## 论文`、`## 其他资料`），若某个板块无符合标准的条目，直接彻底抹去该板块标题。
 4. **来源链接强制要求**：每条正文必须在段落末尾附上【真实抓取数据上下文】中的原始链接，格式为 `[标题](链接)`。若某条资讯在上下文中缺少链接，整条剔除。
 5. **格式规范**：全局严禁使用任何项目符号（`-`、`*`）或数字列表序号（`1.`、`2.`）。
+
+### ✅ 输出前逐条自检（强制，最后一步执行）：
+在写出最终内容前，逐条对照【真实抓取数据上下文】核对以下三点，任何一条不满足就整条删除：
+1. 是否命中上方「性能相关性强过滤」的任一剔除类型？是 → 删除。
+2. 是否写出了具体的底层机制或量化性能数据（数字 / 倍数 / 带宽 / 延迟）？否 → 删除。
+3. 末尾链接是否 100% 来自【真实抓取数据上下文】？否 → 删除。
+自检后若剩余条目数仍超过硬性上限，继续删除相关性最低的条目，直到满足上限为止。
 
 ---
 
