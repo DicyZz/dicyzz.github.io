@@ -540,6 +540,11 @@ def _adapt_properties(schema: dict, a: dict) -> tuple:
     url = (a.get("url") or "").strip()
     summary = _summary_from_blocks(a)
     category, series, seq, tags = learning_meta(a)
+    # 允许调用方显式传入系列/序号（如系列导览页），否则按标题推导
+    if a.get("series"):
+        series = a.get("series")
+    if a.get("seq") is not None:
+        seq = a.get("seq")
     category = category or "未分类"
 
     props = {}
@@ -558,9 +563,9 @@ def _adapt_properties(schema: dict, a: dict) -> tuple:
             continue
         props[prop_name] = {"select": {"name": value}}
 
-    # 序号（number，系列连载内的讲次）
+    # 序号（number，系列连载内的讲次；0 是合法的“导览”序号）
     spec = by_name.get("序号")
-    if spec and spec.get("type") == "number" and seq:
+    if spec and spec.get("type") == "number" and seq is not None:
         props["序号"] = {"number": seq}
 
     # 发布日期（date）

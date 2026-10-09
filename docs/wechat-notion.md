@@ -29,6 +29,9 @@ python scripts/wechat_notion.py push --database-id <id> --only-new
 
 # 5) 重整理已有页面（统一分类/系列/序号/标签）
 python scripts/wechat_notion.py reorg --database-id <id>
+
+# 6) 为每个「系列」生成一篇通俗导览（写回 Notion，序号=0，排在系列最前）
+python scripts/notion_series_summary.py --database-id <id> [--dry-run]
 ```
 
 推送前可以先 `--dry-run` 预览：
