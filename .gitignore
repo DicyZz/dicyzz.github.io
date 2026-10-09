@@ -52,7 +52,6 @@ data/wechat_kb.sqlite3-*
 knowledge_base/
 
 # 公众号文章 → Notion：抓取暂存与图片归档（勿提交）
-data/wechat_urls.txt
-data/wechat_articles.json
+data/wechat_urls*.txt
+data/wechat_articles*.json
 data/wechat_images/
-data/wechat_articles_raw.json

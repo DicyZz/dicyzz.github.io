@@ -47,20 +47,94 @@ HEADERS = {"User-Agent": USER_AGENT}
 # 分类规则（关键词命中，按顺序；用于没有 DeepSeek 时的兜底）
 # 标题关键词分类（按顺序命中；标题比正文更精确，避免「大模型」等泛词在正文里误命中）
 CATEGORY_RULES = [
-    ("计算机体系结构", ["CS61C", "RISC-V", "RISC V", "数据路径", "指令集", "过程调用", "计算体系结构",
-                  "总线", "AXI", "低功耗", "门控时钟", "Intrinsics", "CPU", "Olympus Core", "内核"]),
-    ("存储与互联", ["HBM", "DDR", "SSD", "HDD", "内存", "CXL", "NVLink", "PCIe", "存算一体",
-                 "HBF", "互联", "存储", "InfiniBand", "织网", "MEXT"]),
-    ("封装与材料", ["封装", "载板", "基板", "光刻", "材料", "晶圆", "Chiplet", "芯粒", "CPO",
-                 "硅中介", "Thermal Scaling", "先进封装", "3D"]),
-    ("大模型与推理", ["vLLM", "KV Cache", "MoE", "混合专家", "Transformer", "大模型", "推理系统",
-                 "DeepSeek", "世界模型", "LLM", "自注意力", "CS336"]),
-    ("AI芯片与算力", ["AI芯片", "GPU", "TPU", "NPU", "LPU", "ASIC", "SIMD", "SIMT", "Tensor",
-                 "脉动阵列", "推理芯片", "训练芯片", "超节点", "算力", "超集群", "加速器",
-                 "加速", "向量", "芯片红利", "影子军团", "NextSilicon", "ARIES", "光子",
-                 "量子计算"]),
-    ("半导体与芯片", ["半导体", "芯片", "制程", "晶体管", "摩尔", "FinFET", "EUV", "EDA", "SoC"]),
+    # 学习导向的一级分类（互连/存储等专有名词优先命中，再落到泛化的 AI 芯片/体系结构）
+    ("互连与总线", ["CCIX", "CXL", "PCIe", "PCI-E", "UCIe", "NVLink", "InfiniBand",
+                 "AXI", "总线", "LTR", "OBFF", "Pond", "内存池化", "织网", "背压", "握手"]),
+    ("存储与内存", ["HBM", "HBF", "DDR", "SSD", "HDD", "内存", "存储", "存算一体",
+                 "MEXT", "冯", "异构分层", "Memory"]),
+    ("封装与材料", ["封装", "载板", "基板", "CPO", "光刻", "材料", "Chiplet", "芯粒",
+                 "硅中介", "Thermal Scaling", "3D", "2.5D"]),
+    ("大模型与推理", ["vLLM", "KV Cache", "KVConnector", "MoE", "混合专家", "Transformer",
+                 "大模型", "推理系统", "DeepSeek", "世界模型", "LLM", "自注意力", "CS336"]),
+    ("计算机体系结构", ["CS61C", "RISC-V", "RISCV", "RISC V", "数据路径", "指令集", "过程调用",
+                 "CPU", "低功耗", "门控时钟", "Intrinsics", "Vera", "内核", "体系结构",
+                 "影子军团", "ARIES"]),
+    ("AI芯片与算力", ["AI芯片", "GPU", "TPU", "NPU", "LPU", "ASIC", "SIMD", "SIMT",
+                 "Tensor", "脉动阵列", "推理芯片", "训练芯片", "超节点", "算力", "超集群",
+                 "加速器", "加速", "向量", "端侧", "光子", "量子", "芯片红利",
+                 "NextSilicon", "量化", "稀疏"]),
 ]
+
+# 中文数字 → 整数，用于解析系列连载的讲次
+_CN_NUM = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7,
+           "八": 8, "九": 9, "十": 10}
+
+
+def _cn_to_int(g: str) -> int:
+    if g.isdigit():
+        return int(g)
+    if g == "十":
+        return 10
+    if g.startswith("十"):
+        return 10 + _CN_NUM.get(g[1], 0)
+    if g.endswith("十"):
+        return _CN_NUM.get(g[0], 0) * 10
+    return _CN_NUM.get(g, 0)
+
+
+def _series_of(title: str):
+    """从标题识别「系列 + 讲次」，返回 (系列名, 序号)；非连载返回 (None, 0)。"""
+    t = title or ""
+    pats = [
+        (r"CCIX（([一二三四五六七八九十\d]+)）", "CCIX"),
+        (r"CXL学习（([一二三四五六七八九十\d]+)）", "CXL"),
+        (r"PCIe学习（([一二三四五六七八九十\d]+)）", "PCIe"),
+        (r"UCIe(?: 2\.0)?（([一二三四五六七八九十\d]+)）", "UCIe"),
+        (r"CS61C.*?L(\d+)", "CS61C·RISC-V"),
+        (r"CS336.*?Part(\d+)", "CS336·MoE"),
+        (r"内存的异构分层.*?第([一二三四五六七八九十\d]+)部分", "内存异构分层"),
+    ]
+    for pat, sname in pats:
+        m = re.search(pat, t)
+        if m:
+            return sname, _cn_to_int(m.group(1))
+    m = re.search(r"PCIe之(LTR|OBFF)", t)
+    if m:
+        return "PCIe", {"LTR": 11, "OBFF": 12}[m.group(1)]
+    if re.search(r"Pond|CXL-Based Memory Pooling", t):
+        return "CXL", 12
+    return None, 0
+
+
+def _tag_terms(title: str) -> list:
+    """从标题提取可检索的技术标签（做 multi_select 用）。"""
+    tl = title or ""
+    terms = ["CCIX", "CXL", "PCIe", "UCIe", "NVLink", "InfiniBand", "AXI", "总线",
+             "HBM", "HBF", "DDR", "SSD", "HDD", "存算一体", "异构分层", "内存池化",
+             "先进封装", "载板", "基板", "CPO", "Chiplet", "芯粒", "光刻", "硅中介",
+             "SIMD", "SIMT", "Tensor", "脉动阵列", "TPU", "NPU", "ASIC", "GPU",
+             "超节点", "超集群", "算力", "训练芯片", "推理芯片", "端侧", "光子", "量子",
+             "vLLM", "KV Cache", "MoE", "Transformer", "DeepSeek", "世界模型", "LLM",
+             "RISC-V", "CS61C", "指令集", "数据路径", "低功耗", "门控时钟", "Intrinsics",
+             "量化", "稀疏"]
+    found = []
+    for term in terms:
+        if term.lower() in tl.lower():
+            found.append(term)
+    return found
+
+
+def learning_meta(a: dict) -> tuple:
+    """返回 (分类, 系列, 序号, 标签列表)。"""
+    title = (a.get("title") or "").strip()
+    category = _classify(a)
+    series, seq = _series_of(title)
+    tags = _tag_terms(title)
+    if series:
+        tags = [series] + [t for t in tags if t not in series][:4]
+    else:
+        tags = tags[:4]
+    return category, series or "", seq, tags
 
 
 def _slug(s: str, n: int = 80) -> str:
@@ -454,18 +528,19 @@ def _summary_from_blocks(a: dict, limit: int = 280) -> str:
 
 
 def _adapt_properties(schema: dict, a: dict) -> tuple:
-    """根据 Notion 数据库真实 schema 精确填充属性。
+    """根据 Notion 数据库真实 schema 精确填充属性（含学习导向的 分类/系列/序号/标签）。
 
-    按属性名优先匹配，找不到名字再按类型兜底。返回 (properties, title_prop)。
+    按属性名优先匹配。返回 (properties, title_prop)。
     """
     by_name = {name: spec for name, spec in (schema or {}).items()}
 
     title = (a.get("title") or "未命名文章")[:2000]
     author = (a.get("author") or "").strip() or "未知"
     published = (a.get("published") or "").strip()
-    category = (a.get("category") or "未分类").strip()
     url = (a.get("url") or "").strip()
     summary = _summary_from_blocks(a)
+    category, series, seq, tags = learning_meta(a)
+    category = category or "未分类"
 
     props = {}
 
@@ -474,11 +549,19 @@ def _adapt_properties(schema: dict, a: dict) -> tuple:
     if title_prop:
         props[title_prop] = {"title": [{"text": {"content": title}}]}
 
-    # 分类 / 公众号（select，按名字精确命中）
-    for prop_name, value in (("分类", category), ("公众号", author)):
+    # 分类 / 公众号 / 系列（select，按名字精确命中）
+    for prop_name, value in (("分类", category), ("公众号", author), ("系列", series)):
         spec = by_name.get(prop_name)
-        if spec and spec.get("type") == "select":
-            props[prop_name] = {"select": {"name": value}}
+        if not (spec and spec.get("type") == "select"):
+            continue
+        if not value:
+            continue
+        props[prop_name] = {"select": {"name": value}}
+
+    # 序号（number，系列连载内的讲次）
+    spec = by_name.get("序号")
+    if spec and spec.get("type") == "number" and seq:
+        props["序号"] = {"number": seq}
 
     # 发布日期（date）
     spec = by_name.get("发布日期")
@@ -497,24 +580,29 @@ def _adapt_properties(schema: dict, a: dict) -> tuple:
     if spec and spec.get("type") == "rich_text" and summary:
         props["摘要"] = {"rich_text": [{"text": {"content": summary}}]}
 
-    # 标签（multi_select）：用分类拆词生成几个粗标签，提升检索
+    # 标签（multi_select）：系列名 + 标题提取的技术词
     spec = by_name.get("标签")
-    if spec and spec.get("type") == "multi_select":
-        tags = [t.strip() for t in category.replace("与", " ").replace("和", " ").split()
-                if t.strip() and t.strip() not in ("未分类",)]
-        if tags:
-            props["标签"] = {"multi_select": [{"name": t} for t in tags[:4]]}
+    if spec and spec.get("type") == "multi_select" and tags:
+        uniq = []
+        for t in tags:
+            t = t.strip()
+            if t and t not in uniq:
+                uniq.append(t)
+        props["标签"] = {"multi_select": [{"name": t} for t in uniq[:5]]}
 
     return props, title_prop
 
 
 def _metadata_blocks(a: dict) -> list:
     """正文顶部的元信息块（即使数据库没有对应属性也能保证可检索）。"""
-    category = a.get("category") or "未分类"
+    category, series, seq, _ = learning_meta(a)
     author = a.get("author") or "未知"
     published = a.get("published") or "未知"
     url = a.get("url") or ""
-    lines = [f"分类：{category}", f"公众号：{author}", f"发布时间：{published}"]
+    lines = [f"分类：{category or '未分类'}"]
+    if series:
+        lines.append(f"系列：{series} 第 {seq} 讲" if seq else f"系列：{series}")
+    lines += [f"公众号：{author}", f"发布时间：{published}"]
     if url:
         lines.append(f"原文链接：{url}")
     md = "\n".join(lines)
@@ -522,11 +610,44 @@ def _metadata_blocks(a: dict) -> list:
              "callout": {"rich_text": [_rich_text(md)], "icon": {"type": "emoji", "emoji": "📄"}}}]
 
 
+def _existing_urls(database_id: str, token: str) -> set:
+    """查询 Notion 中已存在的「原文链接」集合，用于增量推送。"""
+    base = "https://api.notion.com/v1"
+    known = set()
+    cursor = None
+    while True:
+        body = {"page_size": 100}
+        if cursor:
+            body["start_cursor"] = cursor
+        try:
+            r = requests.post(f"{base}/databases/{database_id}/query",
+                              headers=_notion_headers(token), json=body, timeout=60)
+        except Exception as e:
+            print(f"⚠️ 查询已有页面失败：{e}")
+            break
+        if r.status_code != 200:
+            print(f"⚠️ 查询已有页面失败：HTTP {r.status_code}")
+            break
+        j = r.json()
+        for pg in j.get("results", []):
+            url_prop = pg.get("properties", {}).get("原文链接", {})
+            u = (url_prop.get("url") or "").strip()
+            if u:
+                known.add(u.rstrip("/"))
+        if not j.get("has_more"):
+            break
+        cursor = j.get("next_cursor")
+    return known
+
+
 def push_to_notion(database_id: str, token: str, in_file: str = STAGING_FILE,
-                   dry_run: bool = False) -> dict:
+                   dry_run: bool = False, only_new: bool = False) -> dict:
     articles = json.load(open(in_file, encoding="utf-8"))
     base = "https://api.notion.com/v1"
-    stats = {"pushed": 0, "failed": 0, "schema": None}
+    stats = {"pushed": 0, "failed": 0, "skipped": 0, "schema": None}
+    existing = _existing_urls(database_id, token) if only_new else set()
+    if only_new:
+        print(f"📌 增量模式：Notion 已有 {len(existing)} 篇，将跳过重复")
 
     schema = _get_database_schema(database_id, token)
     if schema:
@@ -539,6 +660,9 @@ def push_to_notion(database_id: str, token: str, in_file: str = STAGING_FILE,
               "将仅用正文块写入并自动找 title 属性")
 
     for i, a in enumerate(articles, 1):
+        if only_new and (a.get("url") or "").rstrip("/") in existing:
+            stats["skipped"] += 1
+            continue
         props, title_prop = _adapt_properties(schema, a)
         # 构造正文：元信息 + 正文块
         children = _metadata_blocks(a)
@@ -575,24 +699,133 @@ def push_to_notion(database_id: str, token: str, in_file: str = STAGING_FILE,
             print(f"   ❌ {a['title'][:40]} -> {type(e).__name__}: {e}")
             stats["failed"] += 1
 
-    print(f"\n✅ 推送完成：成功 {stats['pushed']} 篇，失败 {stats['failed']} 篇")
+    if only_new:
+        print(f"\n✅ 推送完成：新增 {stats['pushed']} 篇，跳过已有 {stats['skipped']} 篇，失败 {stats['failed']} 篇")
+    else:
+        print(f"\n✅ 推送完成：成功 {stats['pushed']} 篇，失败 {stats['failed']} 篇")
+    return stats
+
+
+def _ensure_properties(database_id: str, token: str) -> dict:
+    """确保数据库存在 系列(select) 与 序号(number) 属性，缺失则创建。"""
+    base = "https://api.notion.com/v1"
+    schema = _get_database_schema(database_id, token) or {}
+    wanted = {
+        "系列": {"select": {}},
+        "序号": {"number": {"format": "number"}},
+    }
+    added = {}
+    for name, cfg in wanted.items():
+        if name in schema:
+            continue
+        r = requests.patch(f"{base}/databases/{database_id}",
+                           headers=_notion_headers(token),
+                           json={"properties": {name: cfg}}, timeout=30)
+        if r.status_code == 200:
+            added[name] = r.json().get("properties", {}).get(name, {})
+            print(f"   ➕ 已新增属性「{name}」")
+        else:
+            print(f"   ⚠️ 新增属性「{name}」失败：{r.status_code} {r.text[:200]}")
+    return schema
+
+
+def reorg(database_id: str, token: str, in_file: str | None = None,
+          dry_run: bool = False) -> dict:
+    """重整理：给已有页面统一套用学习导向的 分类/系列/序号/标签。
+
+    in_file 默认读取 all_raw（含新旧全部文章）；按 原文链接 匹配 Notion 已有页面。
+    """
+    if in_file is None:
+        in_file = os.path.join(DATA_DIR, "wechat_articles_all_raw.json")
+    articles = json.load(open(in_file, encoding="utf-8"))
+    by_url = {a["url"].rstrip("/"): a for a in articles}
+    base = "https://api.notion.com/v1"
+    stats = {"total": 0, "updated": 0, "unmatched": 0, "skipped": 0}
+
+    _ensure_properties(database_id, token)
+    schema = _get_database_schema(database_id, token) or {}
+
+    # 遍历 Notion 已有页面
+    cursor = None
+    while True:
+        body = {"page_size": 100}
+        if cursor:
+            body["start_cursor"] = cursor
+        r = requests.post(f"{base}/databases/{database_id}/query",
+                          headers=_notion_headers(token), json=body, timeout=60)
+        if r.status_code != 200:
+            print(f"   ⚠️ 查询失败：HTTP {r.status_code}")
+            break
+        j = r.json()
+        for pg in j.get("results", []):
+            stats["total"] += 1
+            pid = pg["id"]
+            url = ((pg.get("properties", {}).get("原文链接", {}) or {}).get("url") or "").rstrip("/")
+            a = by_url.get(url)
+            if not a:
+                stats["unmatched"] += 1
+                continue
+            props, _ = _adapt_properties(schema, a)
+            # 只更新非标题属性
+            update = {k: v for k, v in props.items() if v.get("type") != "title"}
+            if not update:
+                stats["skipped"] += 1
+                continue
+            if dry_run:
+                stats["updated"] += 1
+                continue
+            try:
+                rr = requests.patch(f"{base}/pages/{pid}",
+                                    headers=_notion_headers(token),
+                                    json={"properties": update}, timeout=30)
+                if rr.status_code == 200:
+                    stats["updated"] += 1
+                else:
+                    print(f"   ❌ 更新失败 {a['title'][:30]} -> {rr.status_code} {rr.text[:120]}")
+            except Exception as e:
+                print(f"   ❌ {a['title'][:30]} -> {type(e).__name__}: {e}")
+            time.sleep(0.15)
+        if not j.get("has_more"):
+            break
+        cursor = j.get("next_cursor")
+
+    print(f"\n✅ 重整理完成：扫描 {stats['total']} 页，更新 {stats['updated']} 页，"
+          f"未匹配 {stats['unmatched']} 页")
     return stats
 
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="公众号文章 → Notion 知识库")
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("fetch")
+    fetch = sub.add_parser("fetch")
+    fetch.add_argument("--urls-file", default=URLS_FILE)
+    fetch.add_argument("--out-file", default=None)
     sub.add_parser("dedupe")
+    reorg_p = sub.add_parser("reorg", help="重整理已有页面：统一分类/系列/序号/标签")
+    reorg_p.add_argument("--database-id", default=os.environ.get("NOTION_DATABASE_ID", ""))
+    reorg_p.add_argument("--in-file", default=None)
+    reorg_p.add_argument("--dry-run", action="store_true")
     push = sub.add_parser("push")
     push.add_argument("--database-id", default=os.environ.get("NOTION_DATABASE_ID", ""))
     push.add_argument("--dry-run", action="store_true")
+    push.add_argument("--only-new", action="store_true", help="跳过 Notion 中已存在的原文链接")
+    push.add_argument("--in-file", default=STAGING_FILE)
     args = p.parse_args(argv)
 
     if args.cmd == "fetch":
-        fetch_all()
+        fetch_all(urls_file=args.urls_file, out_file=args.out_file)
     elif args.cmd == "dedupe":
         dedupe()
+    elif args.cmd == "reorg":
+        token = os.environ.get("NOTION_API_SECRET", "").strip()
+        if not token:
+            print("❌ 缺少 NOTION_API_SECRET")
+            return 1
+        db = args.database_id.strip()
+        if not db:
+            print("❌ 缺少 --database-id 或 NOTION_DATABASE_ID")
+            return 1
+        reorg(db, token, in_file=args.in_file, dry_run=args.dry_run)
     elif args.cmd == "push":
         token = os.environ.get("NOTION_API_SECRET", "").strip()
         if not token:
@@ -602,7 +835,7 @@ def main(argv=None) -> int:
         if not db:
             print("❌ 缺少 --database-id 或 NOTION_DATABASE_ID")
             return 1
-        push_to_notion(db, token, dry_run=args.dry_run)
+        push_to_notion(db, token, in_file=args.in_file, dry_run=args.dry_run, only_new=args.only_new)
     return 0
 
 

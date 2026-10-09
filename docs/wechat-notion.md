@@ -7,24 +7,28 @@
 
 - 抓取 `mp.weixin.qq.com/s/...` 文章：标题、公众号、发布时间、正文、图片
 - 图片按原始格式下载到本地归档（`data/wechat_images/`），Notion 里用原始图片外链展示
-- 自动分类（规则关键词，可后续接 DeepSeek）
-- 去重：URL 去重 + 内容哈希 + 标题逐字去重（不误合并「Part1/Part2」这类系列文章）
-- 推送到 Notion：自动读取数据库 schema，适配标题/分类/公众号/链接等属性
+- 学习导向三层结构：**分类**（一级领域）→ **系列**（多讲连载）→ **序号**（讲次排序）
+- 自动分类 + 自动识别连载系列（CCIX/CXL/PCIe/UCIe/CS61C/CS336…）并填讲次
+- 去重：URL 去重 + 内容哈希 + 标题逐字去重（不误合并「Part1/Part2」「L20/L21」）
+- 推送到 Notion：自动读取数据库 schema，适配标题/分类/公众号/系列/序号/链接等属性
 
 ## 使用
 
 ```bash
 # 1) 把要导入的文章 URL 逐行写进 data/wechat_urls.txt
 
-# 2) 抓取 + 解析 + 下载图片（生成 data/wechat_articles_raw.json）
-python scripts/wechat_notion.py fetch
+# 2) 抓取 + 解析 + 下载图片
+python scripts/wechat_notion.py fetch --urls-file data/wechat_urls.txt
 
 # 3) 去重 + 分类（生成 data/wechat_articles.json）
 python scripts/wechat_notion.py dedupe
 
 # 4) 推送到 Notion（需要集成令牌 + 数据库 id）
 export NOTION_API_SECRET=ntn_...
-python scripts/wechat_notion.py push --database-id <数据库id>
+python scripts/wechat_notion.py push --database-id <id> --only-new
+
+# 5) 重整理已有页面（统一分类/系列/序号/标签）
+python scripts/wechat_notion.py reorg --database-id <id>
 ```
 
 推送前可以先 `--dry-run` 预览：
@@ -42,15 +46,32 @@ python scripts/wechat_notion.py push --database-id <id> --dry-run
 3. 数据库 id 就是数据库 URL 里的那串 32 位 id，例如
    `https://app.notion.com/p/<32位id>?v=...` 里的 `<32位id>`。
 
-## 分类规则
+## 学习导向的分类体系
 
-`scripts/wechat_notion.py` 里的 `CATEGORY_RULES` 用标题关键词分类，当前分类：
+`scripts/wechat_notion.py` 里内置了「分类 + 系列 + 序号」三层结构：
 
-- AI芯片与算力、大模型与推理、存储与互联、封装与材料、计算机体系结构、半导体与芯片
+| 属性 | 类型 | 说明 |
+| --- | --- | --- |
+| 分类 | select | 一级学习领域，共 6 类 |
+| 系列 | select | 多讲连载的学习主线（CCIX/CXL/PCIe/UCIe/CS61C/CS336/内存异构分层） |
+| 序号 | number | 系列内的讲次，可在 Notion 里按序号升序学习 |
+| 标签 | multi_select | 系列名 + 标题提取的技术词，用于跨领域检索 |
 
-分类会写入 Notion 的 `select` 类型属性（若数据库里没有对应 select 属性，则只写进
-页面顶部的元信息 callout，不影响导入）。想换分类/新增分类，直接改 `CATEGORY_RULES`
-即可；想要更精准，可接 DeepSeek（见 wechat_kb.py 的 `classify_articles`）。
+**一级分类（6 类）**
+
+- 互连与总线：CCIX、CXL、PCIe、UCIe、NVLink、InfiniBand、AXI、内存池化
+- 存储与内存：HBM、DDR、HBF、存算一体、异构分层、MEXT
+- AI芯片与算力：SIMD/SIMT、Tensor、脉动阵列、TPU/NPU/ASIC、超节点、训练/推理芯片
+- 大模型与推理：vLLM、KV Cache、MoE、Transformer、DeepSeek、世界模型
+- 封装与材料：先进封装、载板、基板、CPO、Chiplet、光刻、半导体材料
+- 计算机体系结构：CS61C、RISC-V、指令集、数据路径、低功耗、门控时钟
+
+**连载系列（自动识别讲次）**
+
+- CCIX（9 讲）、CXL（11 讲 + Pond 论文）、PCIe（10 讲 + LTR/OBFF）、UCIe（10 讲）
+- CS61C·RISC-V（按 L12/L20/L21/L23）、CS336·MoE（Part1/2）、内存异构分层（2 讲）
+
+想调整分类或系列规则，直接改 `CATEGORY_RULES` / `_series_of` / `_tag_terms`。
 
 ## 说明
 
