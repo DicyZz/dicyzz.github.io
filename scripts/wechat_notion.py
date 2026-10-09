@@ -436,45 +436,76 @@ def _get_database_schema(database_id: str, token: str) -> dict | None:
     return r.json().get("properties", {})
 
 
+def _parse_date(published: str) -> str | None:
+    """把 '2026-01-18 18:37' 解析成 Notion date 的 ISO 日期。"""
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})", (published or "").strip())
+    return f"{m.group(1)}-{m.group(2)}-{m.group(3)}" if m else None
+
+
+def _summary_from_blocks(a: dict, limit: int = 280) -> str:
+    """用正文第一段非空文本做摘要。"""
+    for b in a.get("blocks", []):
+        if b["type"] not in ("paragraph", "heading", "quote"):
+            continue
+        text = (b.get("text") or "").strip()
+        if len(text) >= 12:
+            return text[:limit]
+    return ""
+
+
 def _adapt_properties(schema: dict, a: dict) -> tuple:
-    """根据真实 schema 构造 properties 字典，并返回标题属性名。
+    """根据 Notion 数据库真实 schema 精确填充属性。
 
-    返回 (properties, title_prop_name)。找不到 title 属性时返回 (None, None)。
+    按属性名优先匹配，找不到名字再按类型兜底。返回 (properties, title_prop)。
     """
-    title_prop = None
-    select_prop = None
-    rich_props = []
-    url_prop = None
-    for name, spec in (schema or {}).items():
-        t = spec.get("type")
-        if t == "title" and title_prop is None:
-            title_prop = name
-        elif t == "select" and select_prop is None:
-            select_prop = name
-        elif t == "url" and url_prop is None:
-            url_prop = name
-        elif t in ("rich_text", "text") and len(rich_props) < 3:
-            rich_props.append(name)
+    by_name = {name: spec for name, spec in (schema or {}).items()}
 
-    props = {}
     title = (a.get("title") or "未命名文章")[:2000]
-    author = (a.get("author") or "").strip()
+    author = (a.get("author") or "").strip() or "未知"
     published = (a.get("published") or "").strip()
     category = (a.get("category") or "未分类").strip()
     url = (a.get("url") or "").strip()
+    summary = _summary_from_blocks(a)
 
+    props = {}
+
+    # 标题（type=title）
+    title_prop = next((n for n, sp in by_name.items() if sp.get("type") == "title"), None)
     if title_prop:
         props[title_prop] = {"title": [{"text": {"content": title}}]}
-    # 公众号 / 发布时间 尝试映射到已有的 rich_text 属性（按顺序）
-    if rich_props and author:
-        props[rich_props[0]] = {"rich_text": [{"text": {"content": author}}]}
-    if len(rich_props) > 1 and published:
-        props[rich_props[1]] = {"rich_text": [{"text": {"content": published}}]}
-    if select_prop:
-        props[select_prop] = {"select": {"name": category}}
-    if url_prop and url:
-        props[url_prop] = {"url": url}
-    return (props, title_prop)
+
+    # 分类 / 公众号（select，按名字精确命中）
+    for prop_name, value in (("分类", category), ("公众号", author)):
+        spec = by_name.get(prop_name)
+        if spec and spec.get("type") == "select":
+            props[prop_name] = {"select": {"name": value}}
+
+    # 发布日期（date）
+    spec = by_name.get("发布日期")
+    if spec and spec.get("type") == "date":
+        d = _parse_date(published)
+        if d:
+            props["发布日期"] = {"date": {"start": d}}
+
+    # 原文链接（url）
+    spec = by_name.get("原文链接")
+    if spec and spec.get("type") == "url" and url:
+        props["原文链接"] = {"url": url}
+
+    # 摘要（rich_text）
+    spec = by_name.get("摘要")
+    if spec and spec.get("type") == "rich_text" and summary:
+        props["摘要"] = {"rich_text": [{"text": {"content": summary}}]}
+
+    # 标签（multi_select）：用分类拆词生成几个粗标签，提升检索
+    spec = by_name.get("标签")
+    if spec and spec.get("type") == "multi_select":
+        tags = [t.strip() for t in category.replace("与", " ").replace("和", " ").split()
+                if t.strip() and t.strip() not in ("未分类",)]
+        if tags:
+            props["标签"] = {"multi_select": [{"name": t} for t in tags[:4]]}
+
+    return props, title_prop
 
 
 def _metadata_blocks(a: dict) -> list:
