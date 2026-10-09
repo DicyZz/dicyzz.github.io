@@ -32,6 +32,12 @@ python scripts/wechat_notion.py reorg --database-id <id>
 
 # 6) 为每个「系列」生成一篇通俗导览（写回 Notion，序号=0，排在系列最前）
 python scripts/notion_series_summary.py --database-id <id> [--dry-run]
+
+# 7) 导出 Notion 为本地 Markdown（供 AI 检索，输出到 knowledge_base/notion/）
+python scripts/notion_export.py --database-id <id>
+
+# 8) 对本地知识库提问（可选配置 DEEPSEEK_API_KEY，未配置则只输出检索片段）
+python scripts/ask_kb.py "CXL 和 CCIX 有什么区别" [--no-llm]
 ```
 
 推送前可以先 `--dry-run` 预览：
