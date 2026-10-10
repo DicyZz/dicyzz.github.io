@@ -6,7 +6,7 @@
 | Flow | 领域（只放这个方向的数据源） |
 | --- | --- |
 | AIFrontier | AI 模型 / Agent / 多模态：OpenAI、Google、Meta、NVIDIA、HF、arXiv cs.LG/CL/AI/CV… |
-| ChinaTech（GlobalTech） | 全球科技资讯：The Verge、TechCrunch、Ars Technica、Wired、BBC Tech、IT之家、爱范儿、极客公园、钛媒体、量子位、雷峰网、OSCHINA、少数派 + 新浪滚动 / 36氪热榜（JSON） |
+| ChinaTech（GlobalTech） | 全球科技资讯：The Verge、TechCrunch、Ars Technica、Wired、BBC Tech、IT之家、爱范儿、极客公园、钛媒体、量子位、雷峰网、OSCHINA、少数派 + 新浪滚动 / 36氪热榜（JSON）；开源组织动态：OCP、OpenHW Group（CORE-V）、RISC-V International、CXL Consortium、ONF、Eclipse、OSI、FSF、Apache、Linux.com |
 | FinFrontier | 金融 / 量化 / 市场：CNBC、MarketWatch、FT、The Economist、美联储、Bloomberg、arXiv q-fin、Quantocracy、QuantPedia、Alpha Architect、CoinDesk… |
 | PerfPulse | 硬件 / 微架构 / 系统 / HPC：Phoronix、LWN、kernel.org、SemiEngineering、EE Times、IEEE Spectrum Chips、Chips and Cheese、Tom's Hardware、TechPowerUp、RISC-V、arXiv cs.AR/DC/PF… |
 | ChipSchool | 半导体基础科普系列（15 讲，每讲一个主题）：知识部分讲教科书级共识，每期附 1–2 条真实抓取的芯片新闻做实例解读，每周五自动下一讲 |

@@ -31,6 +31,7 @@ EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")
 # 每源抓取上限（控制输入规模）
 CATEGORY_MAX_ITEMS = {
     "Tech_News": 5,
+    "OpenSource_Orgs": 4,
 }
 
 MODULE_FEEDS = {
@@ -60,6 +61,19 @@ MODULE_FEEDS = {
         "Solidot": "https://www.solidot.org/index.rss",
         "少数派": "https://sspai.com/feed",
         "OSCHINA": "https://www.oschina.net/news/rss",
+    },
+    # === 开源组织 / 开源硬件生态动态（OCP、OpenHW、RISC-V 等） ===
+    "OpenSource_Orgs": {
+        "OCP 开放计算项目": "https://www.opencompute.org/blog/rss",
+        "OpenHW Group（CORE-V）": "https://openhwfoundation.org/feed/",
+        "RISC-V International": "https://riscv.org/feed/",
+        "CXL Consortium": "https://computeexpresslink.org/feed/",
+        "ONF 开放网络基金会": "https://opennetworking.org/feed/",
+        "Eclipse Foundation": "https://eclipse-foundation.blog/feed/",
+        "Open Source Initiative": "https://opensource.org/feed/",
+        "Free Software Foundation": "https://www.fsf.org/static/fsforg/rss/news.xml",
+        "Apache Software Foundation": "https://news.apache.org/feed/",
+        "Linux Foundation（Linux.com）": "https://www.linux.com/feed/",
     },
 }
 
@@ -130,7 +144,12 @@ def fetch_all_feeds():
         for config in sources
         for item in _fetch_json_source(config, category, max_items=max_items)
     ]
-    return digest.collect(MODULE_FEEDS, extra_items=json_items, max_items_per_source=max_items)
+    return digest.collect(
+        MODULE_FEEDS,
+        extra_items=json_items,
+        max_items_per_source=max_items,
+        category_max_items=CATEGORY_MAX_ITEMS,
+    )
 
 
 # 2. DeepSeek 生成文字简报
@@ -166,6 +185,7 @@ def generate_briefing(items, stats):
 2. **智能硬件与消费电子**：Apple、Samsung、华为、小米、OPPO、vivo、大疆、Sony 等公司的新品发布、供应链与市场份额动态。
 3. **AI 与自动驾驶**：OpenAI、Anthropic、Google DeepMind、NVIDIA，以及百度、DeepSeek、月之暗面、智谱、特斯拉、小鹏、理想、蔚来等公司在模型、智能驾驶上的进展。
 4. **芯片与半导体**：NVIDIA、Intel、AMD、TSMC、ASML、三星，以及华为海思、中芯国际、寒武纪等公司的制程、产品与产能进展。
+5. **开源生态与开源组织**：OCP、OpenHW Group、RISC-V International、CXL Consortium、Linux Foundation、Eclipse Foundation、Apache、ONF 等开源组织的规范发布、项目里程碑、会员/治理动态与新成员加入。
 
 ### 绝对红线（防幻觉铁律，优先级高于一切）：
 - 你只能转述【真实抓取数据上下文】中明确出现的信息；公司名、产品名、事件、数字、日期、链接都必须在上下文中能逐字找到对应出处。
@@ -205,6 +225,7 @@ def generate_briefing(items, stats):
 ## 智能硬件与消费电子 (Hardware & Consumer Electronics)
 ## AI 与自动驾驶 (AI & Autonomous Driving)
 ## 芯片与半导体 (Chips & Semiconductors)
+## 开源生态与开源组织 (Open Source & Foundations)
 
 每条统一格式（正文段落，禁止用项目符号或编号列表）：
 直接用 2-4 句话依次说明「是什么公司 → 发生了什么 → 可验证的具体信息/数字 → 局限或未官宣之处（如有）」，末尾统一用 `[文章标题](原始链接)` 收尾。
@@ -218,7 +239,7 @@ def generate_briefing(items, stats):
 - 每个方向标题 `##` 必须独占一行，严禁被前一条的链接或正文吞并。
 
 风格要求：
-- 精炼优先：每个方向最多保留 4 条最有价值、最相关的动态，整份简报总条目控制在 12-16 条以内；质量优先于数量，素材不足时宁可少写也不要凑数。
+- 精炼优先：每个方向最多保留 4 条最有价值、最相关的动态，整份简报总条目控制在 12-18 条以内；质量优先于数量，素材不足时宁可少写也不要凑数。
 - 每条都必须是「有实质内容的全球科技公司动态」，宁可少而精，不要堆砌无关条目。
 - 数据必须逐字取自上下文，严禁编造具体数字；对传闻/预测类信息明确标注属性。
 - 可附一句克制的编辑点评，但必须基于上下文、客观中立，禁止编造观点。
