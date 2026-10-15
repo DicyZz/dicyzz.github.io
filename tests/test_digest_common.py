@@ -247,7 +247,7 @@ class TestRendering(unittest.TestCase):
         self.assertIn("**标题一** — A（2026-09-20）", md)
         self.assertIn("日期未知", md)
 
-    def test_render_email_has_stats_and_plain_text(self):
+    def test_render_email_without_source_stats_and_plain_text(self):
         html, text = digest.render_email(
             brand_title="测试简报", subtitle="副标题", footer="页脚",
             markdown_text="## 新闻\n\n**要点**：[标题](https://x.test/a) 提升 **2 倍**。",
@@ -255,7 +255,8 @@ class TestRendering(unittest.TestCase):
             date_str="2026-09-22",
         )
         self.assertIn("测试简报", html)
-        self.assertIn("扫描 10 个源", html)
+        self.assertNotIn("扫描 10 个源", html)
+        self.assertNotIn("收录 20 条", html)
         self.assertIn("2026-09-22", html)
         # 纯文本版本要保留链接目标、去掉 markdown 标记
         self.assertIn("标题 (https://x.test/a)", text)

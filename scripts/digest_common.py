@@ -380,15 +380,6 @@ def render_email(*, brand_title: str, subtitle: str, footer: str,
     }}
     .header h1 {{ margin: 0; font-size: 20px; font-weight: 700; color: #ffffff; }}
     .header .subtitle {{ margin-top: 10px; font-size: 12px; color: #a5b4fc; }}
-    .header .stats {{
-      margin-top: 12px;
-      font-size: 12px;
-      color: #cbd5e1;
-      background: rgba(148, 163, 184, 0.18);
-      border-radius: 6px;
-      padding: 6px 10px;
-      display: inline-block;
-    }}
     .content {{ padding: 16px 12px; font-size: 15px; line-height: 1.75; color: #334155; }}
     h2 {{
       color: #0f172a;
@@ -424,7 +415,6 @@ def render_email(*, brand_title: str, subtitle: str, footer: str,
     <div class="header">
       <h1>{brand_title}</h1>
       <div class="subtitle">{subtitle} · 发布日期：{date_str}</div>
-      <div class="stats">{stats_line(stats)}</div>
     </div>
     <div class="content">
       {raw_html}
