@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import tempfile
+import traceback
 from datetime import datetime
 
 from openai import OpenAI
@@ -223,7 +224,11 @@ def generate_briefing(lesson: dict, items: list, stats: dict):
         print("⚠️ 未配置 DEEPSEEK_API_KEY，改为发送原始条目")
         return None
 
-    client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+    client = OpenAI(
+        api_key=DEEPSEEK_API_KEY,
+        base_url="https://api.deepseek.com",
+        timeout=90.0,
+    )
     exact_iso_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     briefing_prompt = f"""
@@ -292,7 +297,16 @@ def generate_briefing(lesson: dict, items: list, stats: dict):
             stream=False,
         )
 
-        md_content = briefing_response.choices[0].message.content.strip()
+        if not briefing_response.choices:
+            print(f"⚠️ DeepSeek 未返回 choices（模型 {DEEPSEEK_MODEL}），改为发送提纲 + 原始条目")
+            return None
+
+        md_content = briefing_response.choices[0].message.content
+        if not md_content:
+            print("⚠️ DeepSeek 返回的文本内容为空！")
+            return None
+
+        md_content = md_content.strip()
         if md_content.startswith("```markdown"):
             md_content = md_content[11:]
         elif md_content.startswith("```"):
@@ -303,7 +317,9 @@ def generate_briefing(lesson: dict, items: list, stats: dict):
         print("✅ 本讲科普文章生成成功！")
         return md_content.strip()
     except Exception as e:
-        print(f"⚠️ DeepSeek 生成失败: {e}，改为发送原始条目")
+        print(f"⚠️ DeepSeek 生成失败（模型 {DEEPSEEK_MODEL}，异常类型 {type(e).__name__}）: {e}")
+        print("   完整堆栈如下，便于在 GitHub Actions / Mac mini 日志中定位：")
+        traceback.print_exc()
         return None
 
 
