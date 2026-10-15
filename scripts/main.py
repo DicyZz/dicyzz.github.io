@@ -29,7 +29,7 @@ def generate_briefing():
     """
     
     response = client.chat.completions.create(
-        model="deepseek-chat",
+        model="deepseek-flash",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7
     )

@@ -27,7 +27,7 @@ KB_DIR = os.path.join(
 )
 INDEX_FILE = os.path.join(KB_DIR, "_index.json")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL") or "deepseek-flash"
 DEFAULT_TOP = 8
 CHUNK_LIMIT = 1400
 

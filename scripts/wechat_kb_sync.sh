@@ -11,7 +11,7 @@
 # 环境变量（写进 ~/.config/briefing-secrets.env 或本文件）：
 #   WEWE_RSS_BASE=http://127.0.0.1:4000
 #   DEEPSEEK_API_KEY=sk-...
-#   DEEPSEEK_MODEL=deepseek-chat
+#   DEEPSEEK_MODEL=deepseek-flash
 
 set -uo pipefail
 

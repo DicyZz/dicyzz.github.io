@@ -13,7 +13,7 @@ import digest_common as digest  # noqa: E402
 # 读取环境变量
 # ---------------------------------------------------------------------------
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL") or "deepseek-flash"
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
 
 try:
@@ -194,7 +194,7 @@ def generate_briefing(items, stats):
         )
 
         if not briefing_response.choices:
-            print("⚠️ DeepSeek 返回了空的 choices 列表！")
+            print(f"⚠️ DeepSeek 未返回 choices（模型 {DEEPSEEK_MODEL}），改为发送原始条目")
             return None
 
         md_content = briefing_response.choices[0].message.content
@@ -213,7 +213,8 @@ def generate_briefing(items, stats):
         print("✅ 多源简报文字生成成功！")
         return md_content.strip()
     except Exception as e:
-        print(f"⚠️ DeepSeek 生成失败: {e}")
+        print(f"⚠️ DeepSeek 生成失败（模型 {DEEPSEEK_MODEL}，异常类型 {type(e).__name__}）: {e}")
+        print("   完整堆栈如下，便于在 GitHub Actions / Mac mini 日志中定位：")
         traceback.print_exc()
         return None
 

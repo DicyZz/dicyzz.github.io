@@ -43,7 +43,7 @@ TARGET_JOB = os.getenv("TARGET_JOB") or "芯片设计"
 TARGET_INDUSTRY = os.getenv("TARGET_INDUSTRY") or "不限"
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
-DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL") or "deepseek-chat"
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL") or "deepseek-flash"
 
 EMAIL_HOST = os.getenv("EMAIL_HOST") or "smtp.gmail.com"
 EMAIL_PORT = int(os.getenv("EMAIL_PORT") or 465)

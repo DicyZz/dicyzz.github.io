@@ -27,7 +27,7 @@ DeepSeek 负责给每篇文章打标签 + 一句话摘要，并做「同主题�
 环境变量：
     WEWE_RSS_BASE     wewe-rss 地址，默认 http://127.0.0.1:4000
     DEEPSEEK_API_KEY  可选；不配置则跳过 AI 打标签/聚类，仅做标题去重
-    DEEPSEEK_MODEL    默认 deepseek-chat
+    DEEPSEEK_MODEL    默认 deepseek-flash
     KB_ACCOUNTS_FILE  账号清单路径，默认 data/wechat_accounts.yml
     KB_DB_FILE        SQLite 路径，默认 data/wechat_kb.sqlite3
     KB_EXPORT_DIR     导出目录，默认 knowledge_base/
@@ -56,7 +56,7 @@ DEFAULT_EXPORT_DIR = os.path.join(REPO_ROOT, "knowledge_base")
 
 WEWE_RSS_BASE = os.environ.get("WEWE_RSS_BASE", "http://127.0.0.1:4000").rstrip("/")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
-DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL") or "deepseek-flash"
 ACCOUNTS_FILE = os.environ.get("KB_ACCOUNTS_FILE", DEFAULT_ACCOUNTS_FILE)
 DB_FILE = os.environ.get("KB_DB_FILE", DEFAULT_DB_FILE)
 EXPORT_DIR = os.environ.get("KB_EXPORT_DIR", DEFAULT_EXPORT_DIR)
