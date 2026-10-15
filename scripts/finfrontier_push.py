@@ -90,7 +90,8 @@ def fetch_all_feeds():
     print("1. 开始并发拉取 RSS 数据源...")
     try:
         items, stats = digest.collect(
-            MODULE_FEEDS, category_max_items=CATEGORY_MAX_ITEMS, timeout=25
+            MODULE_FEEDS, category_max_items=CATEGORY_MAX_ITEMS,
+            timeout=25, summary_limit=900,
         )
         print(f"   ✅ 抓取完成：共获取 {len(items)} 条有效条目")
         return items, stats
@@ -199,7 +200,8 @@ def generate_briefing(items, stats):
 ## 加密与数字资产 (Crypto & Digital Assets)
 
 每条统一格式（正文段落,禁止用项目符号或编号列表）：
-直接用 2-4 句话依次说明「这是什么 → 核心信息/数据 → 可验证的具体数字或事件」，末尾统一跟上 `[上下文中的原始标题](上下文中的原始链接)`，不单独换行。
+用 4-6 句话依次展开「这是什么 → 发生背景与动因 → 核心信息/数据 → 对市场或政策的影响 → 可验证的具体数字或事件 → 局限或适用条件」，中文信息充分时每条约 120-180 字，末尾统一跟上 `[上下文中的原始标题](上下文中的原始链接)`，不单独换行。
+若某条摘要本身信息很少，宁可保持较短的忠实说明，也不要为了凑长度编造背景、数字或影响。
 
 风格要求：
 - 内容量优先但质量不可妥协：每个方向最多保留 5 条最有价值,最相关的内容；有素材的板块至少保留 2 条，整份简报总条目控制在 16-20 条以内。

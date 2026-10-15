@@ -59,6 +59,7 @@ DEFAULT_TIMEOUT = 15             # 秒（原实现是 8 秒，对慢源太紧）
 DEFAULT_WORKERS = 24
 MAX_UNDATED_PER_SOURCE = 1       # 没写发布时间的条目，每个源最多收几条
 FETCH_ATTEMPTS = 2               # 网络抖动（SSL/超时）重试次数
+DEFAULT_SUMMARY_LIMIT = 400      # RSS 摘要保留的默认字符数
 
 
 # ---------------------------------------------------------------------------
@@ -115,14 +116,15 @@ def _link_key(link: str) -> str:
 
 
 def make_item(category: str, source: str, title: str, link: str,
-              summary: str = "", published: datetime | None = None) -> dict:
+              summary: str = "", published: datetime | None = None,
+              summary_limit: int = DEFAULT_SUMMARY_LIMIT) -> dict:
     """构造统一格式的条目。"""
     return {
         "category": category,
         "source": source,
         "title": (title or "").strip(),
         "link": (link or "").strip(),
-        "summary": clean_html_summary(summary),
+        "summary": clean_html_summary(summary, limit=summary_limit),
         "published": published,
     }
 
@@ -154,7 +156,8 @@ def fetch_source(source_name: str, feed_url: str, category: str,
                  max_items: int = DEFAULT_MAX_ITEMS_PER_SOURCE,
                  max_hours: int = DEFAULT_MAX_HOURS,
                  timeout: int = DEFAULT_TIMEOUT,
-                 session: requests.Session | None = None) -> tuple:
+                 session: requests.Session | None = None,
+                 summary_limit: int = DEFAULT_SUMMARY_LIMIT) -> tuple:
     """抓取单个源，返回 (条目列表, 状态说明)。"""
     if not feed_url.startswith("http"):
         feed_url = "https://" + feed_url
@@ -201,6 +204,7 @@ def fetch_source(source_name: str, feed_url: str, category: str,
             entry.get("link", "") or entry.get("id", ""),
             entry.get("summary") or entry.get("description") or "",
             published,
+            summary_limit=summary_limit,
         ))
     note = "ok" if items else "无近期条目"
     if undated:
@@ -218,6 +222,7 @@ def collect(module_feeds: dict, extra_items: list | None = None,
             category_max_items: dict | None = None,
             max_hours: int = DEFAULT_MAX_HOURS,
             timeout: int = DEFAULT_TIMEOUT,
+            summary_limit: int = DEFAULT_SUMMARY_LIMIT,
             workers: int = DEFAULT_WORKERS) -> tuple:
     """并发抓取全部源并做去重，返回 (条目, 统计信息)。
 
@@ -244,9 +249,12 @@ def collect(module_feeds: dict, extra_items: list | None = None,
                 cap = category_max_items.get(category, cap)
             for source_name, feed_url in feeds.items():
                 stats["sources"] += 1
+                fetch_kwargs = {"session": session}
+                if summary_limit != DEFAULT_SUMMARY_LIMIT:
+                    fetch_kwargs["summary_limit"] = summary_limit
                 futures[pool.submit(
                     fetch_source, source_name, feed_url, category,
-                    cap, max_hours, timeout, session,
+                    cap, max_hours, timeout, **fetch_kwargs,
                 )] = source_name
         for future in as_completed(futures):
             source_name = futures[future]
