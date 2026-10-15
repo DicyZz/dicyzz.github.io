@@ -284,7 +284,7 @@ FLOW_NAME = "chinatech"
 SUBJECT = "【GlobalTech】全球科技资讯简报"
 BRAND_TITLE = "🌍 GlobalTech 全球科技资讯简报"
 SUBTITLE = "全球科技资讯严谨跟踪"
-FOOTER = "基于顶级数据源 & DeepSeek 零幻觉模式构建"
+FOOTER = ""
 BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
 
 

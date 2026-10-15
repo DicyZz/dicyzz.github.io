@@ -252,7 +252,7 @@ FLOW_NAME = "finfrontier"
 SUBJECT = "【FinFrontier】每周金融、量化与市场前沿简报"
 BRAND_TITLE = "💰 FinFrontier 每周金融、量化与市场前沿简报"
 SUBTITLE = "金融、量化与市场前沿严谨跟踪"
-FOOTER = "基于顶级数据源 & DeepSeek 零幻觉模式构建"
+FOOTER = ""
 BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
 
 

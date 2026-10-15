@@ -250,7 +250,7 @@ FLOW_NAME = "perfpulse"
 SUBJECT = "【PerfPulse】每周硬件、微架构与 LLM 性能简报"
 BRAND_TITLE = "⚡ PerfPulse 每周微架构、系统与 HPC 简报"
 SUBTITLE = "真实硬件、LLM 加速与 Linux Kernel 严谨跟踪"
-FOOTER = "基于顶级数据源 & DeepSeek 零幻觉模式构建"
+FOOTER = ""
 BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
 
 

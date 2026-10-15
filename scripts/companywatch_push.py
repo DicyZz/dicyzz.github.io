@@ -35,7 +35,7 @@ FLOW_NAME = "companywatch"
 SUBJECT = "【CompanyWatch】本周高曝光科技公司盘点"
 BRAND_TITLE = "🏢 CompanyWatch · 本周高曝光科技公司盘点"
 SUBTITLE = "半导体 / AI 芯片 / LLM 公司动态，国内 + 国外"
-FOOTER = "根据本周真实新闻条目统计曝光频次 · DeepSeek 提炼"
+FOOTER = ""
 BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
 
 # ---------------------------------------------------------------------------

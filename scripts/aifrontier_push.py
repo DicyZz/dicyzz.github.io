@@ -230,7 +230,7 @@ FLOW_NAME = "aifrontier"
 SUBJECT = "【AIFrontier】每周 AI 模型、Agent 与多模态简报"
 BRAND_TITLE = "🤖 AIFrontier 每周 AI 模型、Agent 与多模态简报"
 SUBTITLE = "AI 模型、Agent 与多模态前沿严谨跟踪"
-FOOTER = "基于顶级数据源 & DeepSeek 零幻觉模式构建"
+FOOTER = ""
 BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
 
 
