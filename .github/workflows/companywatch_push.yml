@@ -1,0 +1,44 @@
+name: CompanyWatch Weekly Push
+
+# 定时触发改由本机 Mac mini 负责（周一至周五 08:00 北京时间）：
+#   scripts/setup_local_scheduler.sh   # 安装 launchd 定时
+#   scripts/local_briefings.sh         # 实际执行入口
+# GitHub 自带的 schedule 实测稳定迟到 4.5–5.5 小时（计划 00:00 UTC，实际 04:30+ 才跑），
+# 做不到“早上 8 点”，因此停用；想恢复云端兜底就取消注释，但会与本机定时重复发信。
+on:
+  # schedule:
+  #   - cron: '0 0 * * 1-4'   # 周一至周四 UTC 00:00 = 北京时间 08:00
+  workflow_dispatch: # 支持手动触发
+
+jobs:
+  generate_and_send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Unit Tests
+        run: |
+          python -m unittest discover -s tests -v
+
+      - name: Run Generator Script
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_MODEL: ${{ secrets.DEEPSEEK_MODEL }}
+          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
+        run: |
+          python scripts/companywatch_push.py

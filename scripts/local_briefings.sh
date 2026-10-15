@@ -5,7 +5,7 @@
 #   周二 08:00  AIFrontier     （AI 模型 / Agent / 多模态）
 #   周三 08:00  FinFrontier    （金融 / 量化 / 市场）
 #   周四 08:00  GlobalTech     （全球科技资讯，脚本名 chinatech）
-#   周五 08:00  ChipSchool     （芯片通识课 · 半导体基础科普）
+#   周五 08:00  CompanyWatch  （本周高曝光半导体 / AI 芯片 / LLM 公司）
 #   周六 / 周日  不安排
 #
 # 为什么不用 GitHub 的 schedule：实测该仓库的定时任务稳定迟到 4.5–5.5 小时，
@@ -16,12 +16,10 @@
 #     bash scripts/local_briefings.sh aifrontier
 #     bash scripts/local_briefings.sh finfrontier
 #     bash scripts/local_briefings.sh chinatech
-#     bash scripts/local_briefings.sh chipschool
+#     bash scripts/local_briefings.sh companywatch
 #
-# 芯片通识课指定讲次 / 预览 / 强制推进（不推进进度 / 不发信等特殊用法）：
-#     python scripts/chipschool_push.py --lesson 3
-#     python scripts/chipschool_push.py --dry-run
-#     python scripts/chipschool_push.py --force
+# CompanyWatch 每周自动跑当前周的公司曝光榜，也可手动指定：
+#     python scripts/companywatch_push.py
 #
 # 依赖的密钥放在 ~/.config/briefing-secrets.env（600 权限，不进仓库）：
 #     DEEPSEEK_API_KEY=...
@@ -43,7 +41,7 @@ LOG_FILE="${LOG_DIR}/$(date +%Y-%m-%d).log"
 exec >>"${LOG_FILE}" 2>&1
 
 # 周一=1 … 周日=7；索引 0/6/7 留空（周六周日不安排）
-WEEKDAY_FLOWS=("" "perfpulse" "aifrontier" "finfrontier" "chinatech" "chipschool" "")
+WEEKDAY_FLOWS=("" "perfpulse" "aifrontier" "finfrontier" "chinatech" "companywatch" "")
 DOW="$(date +%u)"
 TODAY="$(date +%Y-%m-%d)"
 
@@ -110,12 +108,7 @@ echo "→ 拉取最新代码（失败则用本地代码继续）"
 
 echo ""
 echo "----- ${FLOW} 开始 $(date '+%T') -----"
-if [ "${FLOW}" = "chipschool" ]; then
-  # 芯片通识课：无参数 = 自动跑当前讲（内部已做「仅周五 + 当天已发」校验）
-  "${PYTHON}" "scripts/chipschool_push.py"
-else
-  "${PYTHON}" "scripts/${FLOW}_push.py"
-fi
+"${PYTHON}" "scripts/${FLOW}_push.py"
 code=$?
 echo "----- ${FLOW} 结束 exit=${code} $(date '+%T') -----"
 

@@ -1,4 +1,4 @@
-# 五个简报 flow（PerfPulse / AIFrontier / FinFrontier / GlobalTech / ChipSchool）
+# 五个简报 flow（PerfPulse / AIFrontier / FinFrontier / GlobalTech / CompanyWatch）
 
 每天只跑一个 flow，用 RSS + 官方接口抓取各自领域的动态，交给 DeepSeek 提炼成中文简报，
 发到邮箱（同时把正文备份到 `output/`、原始条目清单作为附件）。
@@ -9,7 +9,7 @@
 | ChinaTech（GlobalTech） | 全球科技资讯：The Verge、TechCrunch、Ars Technica、Wired、BBC Tech、IT之家、爱范儿、极客公园、钛媒体、量子位、雷峰网、OSCHINA、少数派 + 新浪滚动 / 36氪热榜（JSON）；开源组织动态：OCP、OpenHW Group（CORE-V）、RISC-V International、CXL Consortium、ONF、Eclipse、OSI、FSF、Apache、Linux.com |
 | FinFrontier | 金融 / 量化 / 市场：CNBC、MarketWatch、FT、The Economist、美联储、Bloomberg、arXiv q-fin、Quantocracy、QuantPedia、Alpha Architect、CoinDesk… |
 | PerfPulse | 硬件 / 微架构 / 系统 / HPC：Phoronix、LWN、kernel.org、SemiEngineering、EE Times、IEEE Spectrum Chips、Chips and Cheese、Tom's Hardware、TechPowerUp、RISC-V、arXiv cs.AR/DC/PF… |
-| ChipSchool | 半导体基础科普系列（15 讲，每讲一个主题）：知识部分讲教科书级共识，每期附 1–2 条真实抓取的芯片新闻做实例解读，每周五自动下一讲 |
+| CompanyWatch | 本周高曝光科技公司盘点：按真实抓取条目统计提及频次，覆盖半导体 / AI 芯片 / LLM 公司，国内外分开排序后由 DeepSeek 生成公司速览 |
 
 > 触发时间（均为北京时间，由本机 Mac mini 触发，一天一个 flow）：
 >
@@ -19,7 +19,7 @@
 > | 周二 | 08:00 | AIFrontier |
 > | 周三 | 08:00 | FinFrontier |
 > | 周四 | 08:00 | GlobalTech（chinatech） |
-> | 周五 | 08:00 | ChipSchool |
+> | 周五 | 08:00 | CompanyWatch |
 > | 周六 / 周日 | — | 不安排 |
 
 ## 触发方式：本机 launchd（不用 GitHub 定时）
@@ -37,7 +37,7 @@
 
 也就是说「早上 8 点」在 GitHub 上做不到。所以：
 
-- 四个 `*_push.yml` 的 `schedule` 已注释停用（`workflow_dispatch` 保留，手机上仍可手动触发）
+- 五个 `*_push.yml` 的 `schedule` 已注释停用（`workflow_dispatch` 保留，手机上仍可手动触发）
 - 改由 Mac mini 上的 launchd 定时：**周一至周五 08:00**，每天由 `local_briefings.sh` 按星期几分派当天的那个 flow
 
 ```bash
@@ -48,12 +48,10 @@ bash scripts/setup_local_scheduler.sh
 launchctl kickstart -k "gui/$UID/com.jianzhang.briefings"
 
 # 手动指定某个 flow（不按星期几）
-bash scripts/local_briefings.sh perfpulse    # 或 aifrontier / finfrontier / chinatech / chipschool
+bash scripts/local_briefings.sh perfpulse    # 或 aifrontier / finfrontier / chinatech / companywatch
 
-# 芯片通识课指定讲次 / 预览 / 强制推进（详见 --help）
-python scripts/chipschool_push.py --lesson 3
-python scripts/chipschool_push.py --dry-run
-python scripts/chipschool_push.py --force
+# CompanyWatch 每周自动跑本周公司曝光榜，也可单独手动跑
+python scripts/companywatch_push.py
 
 # 看日志
 tail -f ~/Library/Logs/briefings/$(date +%Y-%m-%d).log
@@ -80,7 +78,7 @@ EMAIL_RECEIVER=you@gmail.com
 
 ## 代码结构
 
-四个脚本（`scripts/*_push.py`）现在只保留**自己的东西**：
+五个脚本（`scripts/*_push.py`）现在只保留**自己的东西**：
 
 1. `MODULE_FEEDS`：本 flow 的专属数据源（分类 → 源名 → feed 地址）
 2. `CATEGORY_MAX_ITEMS`：各板块每源取几条（差异化，避免某一方向淹没简报）
@@ -102,7 +100,7 @@ EMAIL_RECEIVER=you@gmail.com
 
 ```bash
 # 源体检：逐个探测所有源，列出 HTTP 错误 / 空 feed / 60 天无内容
-python scripts/digest_common.py --check                 # 全部四个 flow
+python scripts/digest_common.py --check                 # 全部五个 flow
 python scripts/digest_common.py --check perfpulse       # 只看某一个
 
 # 本地跑某个 flow（需要 DEEPSEEK_API_KEY / EMAIL_* 才会真正发信）
@@ -110,7 +108,7 @@ python scripts/perfpulse_push.py
 
 # 按星期几分派（一天一个 flow；手动指定可传 flow 名）
 bash scripts/local_briefings.sh
-bash scripts/local_briefings.sh chipschool
+bash scripts/local_briefings.sh companywatch
 
 # 单测（含公共模块与 workflow 自检）
 python -m unittest discover -s tests -v

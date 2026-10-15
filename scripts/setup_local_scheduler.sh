@@ -5,7 +5,7 @@
 #   周二 08:00  AIFrontier
 #   周三 08:00  FinFrontier
 #   周四 08:00  GlobalTech（chinatech）
-#   周五 08:00  ChipSchool（芯片通识课）
+#   周五 08:00  CompanyWatch（本周高曝光半导体 / AI 芯片 / LLM 公司）
 #   周六 / 周日  不安排
 #
 # 用法（在 Mac mini 上执行一次即可）：
@@ -15,7 +15,7 @@
 #   1. 准备独立克隆 ~/briefings（每次运行前 git pull，始终用最新代码）
 #   2. 生成密钥模板 ~/.config/briefing-secrets.env（600 权限，请填入真实值）
 #   3. 安装并加载一个 LaunchAgent（周一至周五 08:00，按星期几分派）
-#   4. 清理旧版的 chipschool 独立 LaunchAgent（如有）
+#   4. 清理旧版 chipschool 独立 LaunchAgent（历史遗留，如有）
 #
 # 卸载：launchctl bootout "gui/$UID/com.jianzhang.briefings" && rm ~/Library/LaunchAgents/com.jianzhang.briefings.plist
 
@@ -116,7 +116,7 @@ echo "     周一 08:00  PerfPulse"
 echo "     周二 08:00  AIFrontier"
 echo "     周三 08:00  FinFrontier"
 echo "     周四 08:00  GlobalTech"
-echo "     周五 08:00  ChipSchool"
+echo "     周五 08:00  CompanyWatch"
 echo "   密钥：把 ${SECRETS_FILE} 填好（现在还是空模板）"
 echo "   手动试跑今天的 flow：launchctl kickstart -k gui/$UID/com.jianzhang.briefings"
 echo "   手动指定某个 flow：bash ${WORK_REPO}/scripts/local_briefings.sh perfpulse"
