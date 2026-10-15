@@ -26,13 +26,14 @@ EMAIL_PASSWORD = os.environ.get("EMAIL_PASSWORD", "")
 EMAIL_RECEIVER = os.environ.get("EMAIL_RECEIVER", "")
 
 # ---------------------------------------------------------------------------
-# 1. 各模块 Top 顶级数据源全量配置（已剔除易卡顿的慢速 ArXiv API，确保 15s 内响应）
+# 1. 各模块 Top 顶级数据源全量配置
+#    每源抓取上限按类别差异化，最终仍由 DeepSeek 做相关性与防幻觉筛选。
 # ---------------------------------------------------------------------------
 CATEGORY_MAX_ITEMS = {
-    "Macro_Markets": 4,
-    "Quant_Trading": 4,
-    "Fintech": 3,
-    "Crypto": 4,
+    "Macro_Markets": 5,
+    "Quant_Trading": 6,
+    "Fintech": 5,
+    "Crypto": 6,
 }
 
 MODULE_FEEDS = {
@@ -40,20 +41,23 @@ MODULE_FEEDS = {
     "Macro_Markets": {
         "Federal Reserve Monetary Policy": "https://www.federalreserve.gov/feeds/press_monetary.xml",
         "European Central Bank Press": "https://www.ecb.europa.eu/rss/press.html",
-        "Bank for International Settlements (BIS)": "https://www.bis.org/docmail/bis_press.xml",
+        "Financial Times Home": "https://www.ft.com/rss/home",
         "Financial Times Alphaville": "https://www.ft.com/rss/alphaville",
+        "Financial Times Markets": "https://www.ft.com/rss/markets",
+        "CNBC Economy": "https://www.cnbc.com/id/20910258/device/rss/rss.html",
+        "BBC Business Economy": "https://feeds.bbci.co.uk/news/business/economy/rss.xml",
         "CNBC Top News": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
-        "MarketWatch Top Stories": "http://feeds.marketwatch.com/marketwatch/topstories/",
+        "MarketWatch Top Stories": "https://feeds.content.dowjones.io/public/rss/mw_topstories",
         "The Economist Finance": "https://www.economist.com/finance-and-economics/rss.xml",
     },
 
     # === 量化与算法交易 ===
     "Quant_Trading": {
-        "AQR Insights": "https://www.aqr.com/Insights/RSS",
-        "Man Group Insights": "https://www.man.com/rss/insights",
         "Quantocracy": "https://quantocracy.com/feed/",
         "QuantPedia": "https://quantpedia.com/feed/",
         "Alpha Architect": "https://alphaarchitect.com/feed/",
+        "Meb Faber Research": "https://mebfaber.com/feed/",
+        "ArXiv Quantitative Finance": "https://export.arxiv.org/api/query?search_query=cat:q-fin.TR+OR+cat:q-fin.PM+OR+cat:q-fin.ST+OR+cat:q-fin.CP+OR+cat:q-fin.MF+OR+cat:q-fin.PR+OR+cat:q-fin.RM+OR+cat:q-fin.GN+OR+cat:q-fin.EC&sortBy=submittedDate&sortOrder=descending&max_results=12",
     },
 
     # === 金融科技与市场结构 ===
@@ -62,14 +66,19 @@ MODULE_FEEDS = {
         "The Fintech Times": "https://thefintechtimes.com/feed/",
         "Bank of England Research & Publications": "https://www.bankofengland.co.uk/rss/publications",
         "SEC Press Releases": "https://www.sec.gov/news/pressreleases.rss",
+        "PYMNTS": "https://www.pymnts.com/feed/",
+        "Crowdfund Insider": "https://www.crowdfundinsider.com/feed/",
+        "Payments Dive": "https://www.paymentsdive.com/feeds/news/",
     },
 
     # === 加密与数字资产 ===
     "Crypto": {
-        "Paradigm Research": "https://www.paradigm.xyz/rss.xml",
         "CoinDesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+        "CoinTelegraph": "https://cointelegraph.com/rss",
         "The Block": "https://www.theblock.co/rss.xml",
         "Decrypt": "https://decrypt.co/feed",
+        "a16z Crypto": "https://a16zcrypto.com/feed/",
+        "Unchained Crypto": "https://unchainedcrypto.com/feed/",
     },
 }
 
@@ -80,7 +89,9 @@ def fetch_all_feeds():
     """并发抓取全部源（7 天时间窗 + 跨源去重），返回 (条目, 统计)。"""
     print("1. 开始并发拉取 RSS 数据源...")
     try:
-        items, stats = digest.collect(MODULE_FEEDS, category_max_items=CATEGORY_MAX_ITEMS)
+        items, stats = digest.collect(
+            MODULE_FEEDS, category_max_items=CATEGORY_MAX_ITEMS, timeout=25
+        )
         print(f"   ✅ 抓取完成：共获取 {len(items)} 条有效条目")
         return items, stats
     except Exception as e:
@@ -97,10 +108,23 @@ def generate_briefing(items, stats):
         print("⚠️ 没有可用的抓取条目，跳过 AI 简报生成。")
         return None
 
-    # 防止条目过多导致 Token 超限或响应变慢，最多截取前 35 条核心内容
-    if len(items) > 35:
-        print(f"⚠️ 当前条目数 ({len(items)}) 较多，自动截断前 35 条核心内容以防超限...")
-        items = items[:35]
+    # 各板块按发布时间从新到旧均衡取料，避免某一板块把其他内容挤出上下文。
+    MAX_ITEMS_PER_CATEGORY = 11
+    balanced = []
+    for category in MODULE_FEEDS:
+        category_items = [i for i in items if i.get("category") == category]
+        category_items.sort(
+            key=lambda i: (
+                i.get("published") is not None,
+                i.get("published") or datetime.min.replace(tzinfo=timezone.utc),
+            ),
+            reverse=True,
+        )
+        balanced.extend(category_items[:MAX_ITEMS_PER_CATEGORY])
+
+    if len(balanced) != len(items):
+        print(f"⚠️ 上下文条目较多，按板块均衡截取 {len(balanced)}/{len(items)} 条核心内容。")
+    items = balanced
 
     real_news_context = digest.build_context(items)
 
@@ -178,7 +202,7 @@ def generate_briefing(items, stats):
 直接用 2-4 句话依次说明「这是什么 → 核心信息/数据 → 可验证的具体数字或事件」，末尾统一跟上 `[上下文中的原始标题](上下文中的原始链接)`，不单独换行。
 
 风格要求：
-- 精炼优先：每个方向最多保留 4 条最有价值,最相关的内容，整份简报总条目控制在 12-16 条以内。
+- 内容量优先但质量不可妥协：每个方向最多保留 5 条最有价值,最相关的内容；有素材的板块至少保留 2 条，整份简报总条目控制在 16-20 条以内。
 - 所有链接必须逐字取自【真实抓取数据上下文】，缺链接或对不上则整条剔除。
 """
 
